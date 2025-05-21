@@ -12,13 +12,13 @@ class AudioProcessor {
     this.visualizerIntervalId = null;
   }
 
-  // Initialize the audio processor with an input stream
-  async initialize(stream) {
+  // Initialize the audio processor with an input stream and existing audio context
+  async initialize(stream, existingAudioContext = null) {
     // Clean up any existing audio context
     await this.cleanup();
     
-    // Create a new audio context
-    this.audioContext = new AudioContext();
+    // Use provided audio context or create a new one
+    this.audioContext = existingAudioContext || new AudioContext();
     
     // Create media stream source
     this.inputNode = this.audioContext.createMediaStreamSource(stream);
@@ -116,6 +116,11 @@ class AudioProcessor {
     return this.outputNode;
   }
 
+  // Get the audio context
+  getAudioContext() {
+    return this.audioContext;
+  }
+
   // Start the visualizer
   startVisualizer(callback, intervalMs = 100) {
     if (!this.isInitialized || !this.analyser) {
@@ -156,15 +161,33 @@ class AudioProcessor {
     // Stop visualizer
     this.stopVisualizer();
     
-    // Close audio context if it exists
+    // Close audio context if it exists and we created it
     if (this.audioContext) {
       try {
-        await this.audioContext.close();
+        // Disconnect nodes instead of closing the context
+        // since the context might be shared
+        if (this.outputNode) {
+          this.outputNode.disconnect();
+        }
+        
+        if (this.analyser) {
+          this.analyser.disconnect();
+        }
+        
+        if (this.inputNode) {
+          this.inputNode.disconnect();
+        }
+        
+        if (this.filters) {
+          this.filters.forEach(filter => {
+            try { filter.disconnect(); } catch (e) {}
+          });
+        }
       } catch (error) {
-        console.error('Error closing audio context:', error);
+        console.error('Error cleaning up audio processor:', error);
       }
       
-      this.audioContext = null;
+      // Reset nodes but keep the context reference
       this.inputNode = null;
       this.outputNode = null;
       this.filters = [];

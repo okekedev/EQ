@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>EQ Translator</title>
   <link rel="stylesheet" href="css/popup.css">
+  <link rel="stylesheet" href="css/notifications.css">
 </head>
 <body>
   <div class="container">
@@ -234,12 +235,20 @@
     </div>
   </div>
 
-  <!-- Scripts -->
+  <!-- Debug Module (Optional) -->
+  <script src="js/debug-module.js"></script>
+
+  <!-- Core Scripts -->
   <script src="js/storage-manager.js"></script>
   <script src="js/audio-processor.js"></script>
   <script src="js/speech-recognition.js"></script>
   <script src="js/translation-service.js"></script>
   <script src="js/speech-synthesis.js"></script>
+  <script src="js/visualizer.js"></script>
+  <script src="js/capture-manager.js"></script>
+  <script src="js/ui-controller.js"></script>
+  
+  <!-- Main Popup Script (Must be last) -->
   <script src="js/popup.js"></script>
 </body>
 </html>

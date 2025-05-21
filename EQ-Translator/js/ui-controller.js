@@ -479,6 +479,14 @@ class UIController {
   }
 
   /**
+   * Get the current state
+   * @returns {Object} - The current state
+   */
+  getState() {
+    return this._getState();
+  }
+
+  /**
    * Clean up the UI controller
    */
   cleanup() {
