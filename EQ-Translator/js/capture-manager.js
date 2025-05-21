@@ -95,9 +95,9 @@ class CaptureManager {
       // Create destination for audio passthrough
       this.audioDestination = this.audioContext.createMediaStreamDestination();
       
-      // Initialize audio processor with the stream
+      // Initialize audio processor with the stream AND our audio context
       if (this.audioProcessor) {
-        await this.audioProcessor.initialize(stream);
+        await this.audioProcessor.initialize(stream, this.audioContext);
         
         // Connect the processor's output to the destination if passthrough is enabled
         if (this.audioPassthrough) {
@@ -171,7 +171,7 @@ class CaptureManager {
         await this.audioProcessor.cleanup();
       }
       
-      // Clean up audio context
+      // Clean up audio context connections
       if (this.mediaStreamSource) {
         this.mediaStreamSource.disconnect();
         this.mediaStreamSource = null;
