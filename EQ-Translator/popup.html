@@ -5,6 +5,27 @@
   <title>EQ Translator</title>
   <link rel="stylesheet" href="css/popup.css">
   <link rel="stylesheet" href="css/notifications.css">
+  <style>
+    /* Added styles for EQ controls */
+    .control-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--spacing-md);
+    }
+    
+    .control-panel .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+    
+    /* Style for disabled sliders */
+    .eq-slider-group.disabled input[type="range"] {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -34,6 +55,15 @@
           <button id="toggle-equalizer-btn" class="btn icon-btn" title="Toggle Equalizer">▼</button>
         </h2>
         <div class="equalizer-container">
+          <!-- Added EQ controls panel -->
+          <div class="control-panel">
+            <div class="checkbox-group">
+              <input type="checkbox" id="eq-enabled-checkbox" checked>
+              <label for="eq-enabled-checkbox">Enable Equalizer</label>
+            </div>
+            <button id="reset-eq-btn" class="btn small">Reset</button>
+          </div>
+          
           <div class="eq-slider-group">
             <div class="eq-slider">
               <span class="eq-label">100 Hz</span>
@@ -94,6 +124,12 @@
               <option value="zh-CN">Chinese (Simplified)</option>
             </select>
           </div>
+          
+          <!-- Recognition control panel -->
+          <div class="control-panel">
+            <button id="toggle-recognition-button" class="btn primary">Start Recognition</button>
+          </div>
+          
           <div class="transcript-container">
             <div class="transcript-header">
               <h3>Transcript</h3>
@@ -211,25 +247,6 @@
             <input type="checkbox" id="compact-mode-checkbox">
             <label for="compact-mode-checkbox">Compact mode</label>
           </div>
-        </div>
-        <div class="settings-section">
-          <h3>API Key</h3>
-          <div class="input-group">
-            <label for="api-key-input">Google Translate API Key</label>
-            <input type="password" id="api-key-input" placeholder="Enter API key">
-          </div>
-          <button id="save-api-key-btn" class="btn small">Save Key</button>
-        </div>
-        <div class="settings-section">
-          <h3>Export/Import</h3>
-          <div class="button-group">
-            <button id="export-settings-btn" class="btn small">Export Settings</button>
-            <button id="import-settings-btn" class="btn small">Import Settings</button>
-          </div>
-        </div>
-        <div class="settings-section">
-          <h3>Reset</h3>
-          <button id="reset-settings-btn" class="btn small danger">Reset All Settings</button>
         </div>
       </div>
     </div>

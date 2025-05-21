@@ -10,6 +10,7 @@ class SpeechRecognizer {
     this.interimResults = true;
     this.continuousMode = true;
     this.maxAlternatives = 1;
+    this.hasAudioSource = false;
   }
 
   // Initialize speech recognition with the specified language
@@ -42,24 +43,56 @@ class SpeechRecognizer {
     return this.recognition;
   }
 
+  // Set the audio stream to use for recognition
+  setAudioSource(stream) {
+    // Store reference that this is a valid audio source
+    this.hasAudioSource = !!stream;
+    return this.hasAudioSource;
+  }
+
   // Start speech recognition
-  start() {
+  async start() {
     if (!this.recognition) {
       this.initialize();
+    }
+    
+    // Check if we have an audio source
+    if (!this.hasAudioSource) {
+      const error = {
+        type: 'no-audio-source',
+        message: 'No audio source available. Please start audio capture first.'
+      };
+      
+      if (this.onErrorCallback) {
+        this.onErrorCallback(error);
+      }
+      return false;
     }
     
     if (!this.isRecognizing) {
       try {
         this.recognition.start();
         this.isRecognizing = true;
-        
-        // Log start of recognition
         console.log('Speech recognition started');
-        
         return true;
       } catch (error) {
         console.error('Error starting speech recognition:', error);
-        throw error;
+        
+        // Handle specific error cases
+        if (error.name === 'NotAllowedError') {
+          const customError = {
+            type: 'not-allowed',
+            message: 'Speech recognition not allowed. This may be due to browser restrictions.'
+          };
+          
+          if (this.onErrorCallback) {
+            this.onErrorCallback(customError);
+          }
+        } else {
+          throw error;
+        }
+        
+        return false;
       }
     }
     
@@ -72,10 +105,7 @@ class SpeechRecognizer {
       try {
         this.recognition.stop();
         this.isRecognizing = false;
-        
-        // Log stop of recognition
         console.log('Speech recognition stopped');
-        
         return true;
       } catch (error) {
         console.error('Error stopping speech recognition:', error);
@@ -214,10 +244,7 @@ class SpeechRecognizer {
 
   // Handle recognition end
   _handleEnd() {
-    // Log end of recognition
     console.log('Speech recognition ended');
-    
-    // Reset recognizing state
     this.isRecognizing = false;
     
     // Restart recognition if continuous mode is enabled
@@ -234,17 +261,19 @@ class SpeechRecognizer {
       case 'aborted':
         return 'Speech recognition was aborted';
       case 'audio-capture':
-        return 'Audio capture failed';
+        return 'Audio capture failed. Please check your audio source.';
       case 'network':
         return 'Network error occurred';
       case 'not-allowed':
-        return 'Speech recognition not allowed';
+        return 'Speech recognition not allowed. This may be due to browser restrictions.';
       case 'service-not-allowed':
         return 'Speech recognition service not allowed';
       case 'bad-grammar':
         return 'Grammar error in speech recognition';
       case 'language-not-supported':
         return 'Language not supported';
+      case 'no-audio-source':
+        return 'No audio source available. Please start audio capture first.';
       default:
         return `Unknown error: ${errorType}`;
     }

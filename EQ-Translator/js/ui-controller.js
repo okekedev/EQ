@@ -61,7 +61,8 @@ class UIController {
     this.recognitionControls = {
       sourceLangSelect: elements.sourceLangSelect,
       transcript: elements.transcriptElem,
-      clearTranscriptBtn: elements.clearTranscriptBtn
+      clearTranscriptBtn: elements.clearTranscriptBtn,
+      toggleRecognitionBtn: document.getElementById('toggle-recognition-button')
     };
     
     // Translation controls
@@ -91,12 +92,7 @@ class UIController {
       settingsModal: elements.settingsModal,
       themeButtons: elements.themeButtons,
       showVisualizerCheckbox: elements.showVisualizerCheckbox,
-      compactModeCheckbox: elements.compactModeCheckbox,
-      apiKeyInput: elements.apiKeyInput,
-      saveApiKeyBtn: elements.saveApiKeyBtn,
-      exportSettingsBtn: elements.exportSettingsBtn,
-      importSettingsBtn: elements.importSettingsBtn,
-      resetSettingsBtn: elements.resetSettingsBtn
+      compactModeCheckbox: elements.compactModeCheckbox
     };
     
     // Section toggle buttons
@@ -374,6 +370,26 @@ class UIController {
   }
 
   /**
+   * Update recognition button state based on recognition status
+   * @param {boolean} isRecognizing - Whether speech recognition is active
+   */
+  updateRecognitionButton(isRecognizing) {
+    const button = document.getElementById('toggle-recognition-button');
+    if (button) {
+      if (isRecognizing) {
+        button.textContent = 'Stop Recognition';
+        button.classList.remove('primary');
+        button.classList.add('secondary');
+      } else {
+        button.textContent = 'Start Recognition';
+        button.classList.remove('secondary');
+        button.classList.add('primary');
+      }
+    }
+    return this;
+  }
+
+  /**
    * Show error notification
    * @param {string} title - The notification title
    * @param {string} message - The notification message
@@ -509,14 +525,19 @@ class UIController {
       this.captureControls.stopBtn.disabled = !this.isCapturing;
     }
     
+    // Update recognition button
+    this.updateRecognitionButton(this.isRecognizing);
+    
     // Update translation button
     if (this.translationControls.translateBtn) {
-      this.translationControls.translateBtn.disabled = this.isTranslating;
+      this.translationControls.translateBtn.disabled = 
+        this.isTranslating || (!this.isRecognizing && !document.getElementById('transcript').textContent);
     }
     
     // Update speech buttons
     if (this.speechControls.speakBtn) {
-      this.speechControls.speakBtn.disabled = this.isSpeaking;
+      this.speechControls.speakBtn.disabled = 
+        this.isSpeaking || !document.getElementById('translation-result').textContent;
     }
     
     if (this.speechControls.stopSpeechBtn) {

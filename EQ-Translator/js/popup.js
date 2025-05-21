@@ -103,11 +103,6 @@ function initializeUI() {
     themeButtons: document.querySelectorAll('.theme-btn'),
     showVisualizerCheckbox: document.getElementById('show-visualizer-checkbox'),
     compactModeCheckbox: document.getElementById('compact-mode-checkbox'),
-    apiKeyInput: document.getElementById('api-key-input'),
-    saveApiKeyBtn: document.getElementById('save-api-key-btn'),
-    exportSettingsBtn: document.getElementById('export-settings-btn'),
-    importSettingsBtn: document.getElementById('import-settings-btn'),
-    resetSettingsBtn: document.getElementById('reset-settings-btn'),
     
     // Section toggle buttons
     sectionToggleButtons: [
@@ -149,11 +144,6 @@ async function initializeServices() {
           visualizer.start(analyser);
         }
       }
-      
-      // Start recognition if not already started
-      if (!uiController.getState().isRecognizing) {
-        startRecognition();
-      }
     })
     .setOnCaptureStopped(() => {
       uiController.updateState({ isCapturing: false });
@@ -161,9 +151,6 @@ async function initializeServices() {
       
       // Stop visualizer
       visualizer.stop();
-      
-      // Stop recognition
-      stopRecognition();
     })
     .setOnCaptureError((error) => {
       console.error('Capture error:', error);
@@ -345,6 +332,9 @@ function setupEventListeners() {
   document.getElementById('start-capture-btn').addEventListener('click', startCapture);
   document.getElementById('stop-capture-btn').addEventListener('click', stopCapture);
   
+  // Speech recognition toggle
+  document.getElementById('toggle-recognition-button').addEventListener('click', toggleRecognition);
+  
   // Equalizer sliders
   const eqSliders = document.querySelectorAll('.eq-slider input');
   eqSliders.forEach((slider, index) => {
@@ -426,11 +416,6 @@ function setupEventListeners() {
   document.getElementById('show-visualizer-checkbox').addEventListener('change', updateUISettings);
   document.getElementById('compact-mode-checkbox').addEventListener('change', updateUISettings);
   
-  document.getElementById('save-api-key-btn').addEventListener('click', saveApiKey);
-  document.getElementById('export-settings-btn').addEventListener('click', exportSettings);
-  document.getElementById('import-settings-btn').addEventListener('click', importSettings);
-  document.getElementById('reset-settings-btn').addEventListener('click', resetSettings);
-  
   // Handle message from background script
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'tabClosed' && message.tabId === captureManager.getActiveTabId()) {
@@ -455,7 +440,7 @@ function checkCaptureStatus() {
   });
 }
 
-// Start audio capture
+// Start capturing audio from the tab
 async function startCapture() {
   try {
     uiController.setStatus('Starting capture...', 'pending');
@@ -472,10 +457,22 @@ async function startCapture() {
     // Start capturing audio from the tab
     await captureManager.startCapture(tabId);
     
-    // Start speech recognition if not already started
-    if (!uiController.getState().isRecognizing) {
-      startRecognition();
+    // Get the active stream and set it as audio source for speech recognition
+    const stream = captureManager.getActiveStream();
+    if (stream && speechRecognizer) {
+      speechRecognizer.setAudioSource(stream);
     }
+    
+    // Only start visualizer if enabled
+    if (document.getElementById('show-visualizer-checkbox').checked) {
+      const analyser = audioProcessor.getAnalyser();
+      if (analyser) {
+        visualizer.start(analyser);
+      }
+    }
+    
+    uiController.updateState({ isCapturing: true });
+    uiController.setStatus('Capturing audio', 'active');
   } catch (error) {
     console.error('Error starting capture:', error);
     uiController.showErrorNotification('Capture Error', error.message);
@@ -483,16 +480,29 @@ async function startCapture() {
   }
 }
 
-// Stop audio capture
+// Stop audio capture and speech recognition
 async function stopCapture() {
   try {
     uiController.setStatus('Stopping capture...', 'pending');
     
-    // Stop capture
+    // Stop speech recognition first if it's running
+    if (uiController.getState().isRecognizing) {
+      stopRecognition();
+    }
+    
+    // Then stop capture
     await captureManager.stopCapture();
     
-    // Stop recognition
-    stopRecognition();
+    // Reset audio source for speech recognition
+    if (speechRecognizer) {
+      speechRecognizer.setAudioSource(null);
+    }
+    
+    // Stop visualizer
+    visualizer.stop();
+    
+    uiController.updateState({ isCapturing: false });
+    uiController.setStatus('Ready', 'success');
   } catch (error) {
     console.error('Error stopping capture:', error);
     uiController.showErrorNotification('Stop Capture Error', error.message);
@@ -500,9 +510,31 @@ async function stopCapture() {
   }
 }
 
+// Toggle speech recognition on/off
+function toggleRecognition() {
+  if (uiController.getState().isRecognizing) {
+    stopRecognition();
+  } else {
+    // Check if audio capture is active before starting recognition
+    if (!captureManager.isActive()) {
+      uiController.showErrorNotification('Recognition Error', 
+        'Please start audio capture first before enabling speech recognition.');
+      return;
+    }
+    startRecognition();
+  }
+}
+
 // Start speech recognition
 function startRecognition() {
   try {
+    // Check if audio capture is active
+    if (!captureManager.isActive()) {
+      uiController.showErrorNotification('Recognition Error', 
+        'Please start audio capture first before enabling speech recognition.');
+      return;
+    }
+    
     // Configure recognizer
     speechRecognizer.configure({
       sourceLang: document.getElementById('source-language').value,
@@ -514,7 +546,7 @@ function startRecognition() {
     speechRecognizer.start();
     
     uiController.updateState({ isRecognizing: true });
-    console.log('Speech recognition started');
+    uiController.setStatus('Recognizing speech', 'active');
   } catch (error) {
     console.error('Error starting recognition:', error);
     uiController.showErrorNotification('Recognition Error', error.message);
@@ -526,9 +558,11 @@ function stopRecognition() {
   try {
     speechRecognizer.stop();
     uiController.updateState({ isRecognizing: false });
-    console.log('Speech recognition stopped');
+    uiController.setStatus(captureManager.isActive() ? 'Capturing audio' : 'Ready', 
+                           captureManager.isActive() ? 'active' : 'success');
   } catch (error) {
     console.error('Error stopping recognition:', error);
+    uiController.showErrorNotification('Recognition Error', error.message);
   }
 }
 
@@ -754,103 +788,160 @@ function updateUISettings() {
   // Save settings
   storageManager.saveSettings('ui', settings);
 }
+// Add these functions to your popup.js file
 
-// Save API key
-async function saveApiKey() {
-  const apiKey = document.getElementById('api-key-input').value.trim();
+// Function to reset equalizer to default values
+function resetEqualizer() {
+  // Apply flat preset (all values set to 0)
+  uiController.applyEqualizerPreset('flat');
   
-  if (apiKey) {
-    try {
-      await translationService.saveApiKey(apiKey);
-      document.getElementById('api-key-input').value = '';
-      uiController.showSuccessNotification('API key saved successfully');
-    } catch (error) {
-      console.error('Error saving API key:', error);
-      uiController.showErrorNotification('Failed to save API key', error.message);
+  // Update settings
+  updateEqualizerSettings();
+  
+  // Show notification
+  uiController.showSuccessNotification('Equalizer reset to default values');
+}
+
+// Function to toggle equalizer on/off
+function toggleEqualizerEnabled() {
+  const isEnabled = document.getElementById('eq-enabled-checkbox').checked;
+  
+  // Enable/disable sliders visually
+  const sliderGroup = document.querySelector('.eq-slider-group');
+  if (sliderGroup) {
+    sliderGroup.classList.toggle('disabled', !isEnabled);
+  }
+  
+  // Enable/disable preset buttons
+  const presetButtons = document.querySelectorAll('.eq-presets button');
+  presetButtons.forEach(button => {
+    button.disabled = !isEnabled;
+  });
+  
+  // Apply bypassed equalizer or current settings
+  if (audioProcessor && audioProcessor.isInitialized) {
+    if (isEnabled) {
+      // Apply current equalizer settings
+      const settings = uiController.getEqualizerSettings();
+      audioProcessor.updateEqualizer(settings);
+    } else {
+      // Bypass equalizer (all bands set to 0)
+      const flatSettings = {
+        band1: 0,
+        band2: 0,
+        band3: 0,
+        band4: 0,
+        band5: 0,
+        band6: 0
+      };
+      audioProcessor.updateEqualizer(flatSettings);
     }
   }
+  
+  // Save the enabled state
+  storageManager.saveSettings('equalizer', {
+    enabled: isEnabled
+  });
+  
+  // Show notification
+  uiController.showSuccessNotification(`Equalizer ${isEnabled ? 'enabled' : 'disabled'}`);
 }
 
-// Export settings
-async function exportSettings() {
-  try {
-    const settingsJson = await storageManager.exportSettings();
-    
-    // Create a download link
-    const blob = new Blob([settingsJson], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'eq-translator-settings.json';
-    a.click();
-    
-    // Clean up
-    URL.revokeObjectURL(url);
-    
-    uiController.showSuccessNotification('Settings exported successfully');
-  } catch (error) {
-    console.error('Error exporting settings:', error);
-    uiController.showErrorNotification('Failed to export settings', error.message);
-  }
+// Add these event listeners in the setupEventListeners function
+function setupEventListeners() {
+  // ... existing code ...
+  
+  // Add EQ reset button event listener
+  document.getElementById('reset-eq-btn').addEventListener('click', resetEqualizer);
+  
+  // Add EQ enabled checkbox event listener
+  document.getElementById('eq-enabled-checkbox').addEventListener('change', toggleEqualizerEnabled);
+  
+  // ... rest of existing code ...
 }
 
-// Import settings
-async function importSettings() {
+// Modify the loadSettings function to load EQ enabled state
+async function loadSettings() {
   try {
-    // Create file input
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'application/json';
+    // ... existing code ...
     
-    fileInput.addEventListener('change', async (event) => {
-      const file = event.target.files[0];
-      
-      if (file) {
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-          try {
-            const settingsJson = e.target.result;
-            const success = await storageManager.importSettings(settingsJson);
-            
-            if (success) {
-              uiController.showSuccessNotification('Settings imported successfully');
-              await loadSettings();
-            } else {
-              uiController.showErrorNotification('Failed to import settings', 'Invalid settings file');
+    // Load equalizer settings
+    const eqSettings = await storageManager.getSettings('equalizer');
+    
+    // Update sliders
+    if (eqSettings) {
+      // Set enabled state if available
+      if (eqSettings.enabled !== undefined) {
+        const eqEnabledCheckbox = document.getElementById('eq-enabled-checkbox');
+        if (eqEnabledCheckbox) {
+          eqEnabledCheckbox.checked = eqSettings.enabled;
+          
+          // Apply disabled visual state if needed
+          if (!eqSettings.enabled) {
+            const sliderGroup = document.querySelector('.eq-slider-group');
+            if (sliderGroup) {
+              sliderGroup.classList.add('disabled');
             }
-          } catch (error) {
-            console.error('Error importing settings:', error);
-            uiController.showErrorNotification('Failed to import settings', error.message);
+            
+            // Disable preset buttons
+            const presetButtons = document.querySelectorAll('.eq-presets button');
+            presetButtons.forEach(button => {
+              button.disabled = true;
+            });
           }
-        };
-        
-        reader.readAsText(file);
+        }
       }
-    });
-    
-    fileInput.click();
-  } catch (error) {
-    console.error('Error importing settings:', error);
-    uiController.showErrorNotification('Failed to import settings', error.message);
-  }
-}
-
-// Reset settings
-async function resetSettings() {
-  if (confirm('Are you sure you want to reset all settings to default?')) {
-    try {
-      await storageManager.resetSettings();
-      await loadSettings();
-      uiController.showSuccessNotification('Settings reset to defaults');
-    } catch (error) {
-      console.error('Error resetting settings:', error);
-      uiController.showErrorNotification('Failed to reset settings', error.message);
+      
+      // ... existing slider update code ...
     }
+    
+    // ... rest of existing code ...
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    // Continue with defaults
   }
 }
 
+// Modify the updateEqualizerSettings function to respect enabled state
+function updateEqualizerSettings() {
+  // Get settings from UI
+  const settings = uiController.getEqualizerSettings();
+  
+  // Add enabled state to settings
+  const isEnabled = document.getElementById('eq-enabled-checkbox').checked;
+  settings.enabled = isEnabled;
+  
+  // Save and apply settings
+  handleSettingsChanged('equalizer', settings);
+}
+
+// Modify the AudioProcessor class to handle bypass mode
+// Add this method to the AudioProcessor class in audio-processor.js
+class AudioProcessor {
+  // ... existing code ...
+  
+  // Bypass equalizer (set all bands to 0)
+  bypassEqualizer() {
+    if (!this.isInitialized) {
+      return false;
+    }
+    
+    // Create flat settings
+    const flatSettings = {
+      band1: 0,
+      band2: 0,
+      band3: 0,
+      band4: 0,
+      band5: 0,
+      band6: 0
+    };
+    
+    // Apply flat settings
+    return this.updateEqualizer(flatSettings);
+  }
+  
+  // ... rest of existing code ...
+}
 // Populate voice select dropdown
 function populateVoiceList() {
   // Get available voices
