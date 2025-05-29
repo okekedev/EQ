@@ -1,4 +1,4 @@
-// Audio processing module with equalizer implementation
+// Enhanced Audio processing module with microphone routing capability
 
 class AudioProcessor {
   constructor() {
@@ -10,6 +10,12 @@ class AudioProcessor {
     this.isInitialized = false;
     this.visualizerCallback = null;
     this.visualizerIntervalId = null;
+    
+    // New properties for microphone routing
+    this.microphoneDestination = null;
+    this.virtualMicStream = null;
+    this.isMicRoutingEnabled = false;
+    this.micGainNode = null;
   }
 
   // Initialize the audio processor with an input stream and existing audio context
@@ -30,6 +36,13 @@ class AudioProcessor {
     // Create gain node for output
     this.outputNode = this.audioContext.createGain();
     
+    // Create microphone destination for routing processed audio
+    this.microphoneDestination = this.audioContext.createMediaStreamDestination();
+    
+    // Create gain node for microphone output level control
+    this.micGainNode = this.audioContext.createGain();
+    this.micGainNode.gain.value = 1.0; // Default gain
+    
     // Create default equalizer
     await this.createEqualizer();
     
@@ -39,7 +52,7 @@ class AudioProcessor {
     return this.audioContext;
   }
 
-  // Create the equalizer with 6 bands
+  // Create the equalizer with 6 bands and connect microphone routing
   async createEqualizer(settings = null) {
     // Load saved settings or use defaults
     const eqSettings = settings || await this.loadEqualizerSettings();
@@ -88,7 +101,77 @@ class AudioProcessor {
     prevNode.connect(this.analyser);
     this.analyser.connect(this.outputNode);
     
+    // Connect to microphone destination through gain control
+    this.analyser.connect(this.micGainNode);
+    this.micGainNode.connect(this.microphoneDestination);
+    
+    // Create the virtual microphone stream
+    this.virtualMicStream = this.microphoneDestination.stream;
+    
     return this.filters;
+  }
+
+  // Enable or disable microphone routing
+  enableMicrophoneRouting(enabled = true) {
+    this.isMicRoutingEnabled = enabled;
+    
+    if (enabled) {
+      console.log('Microphone routing enabled - processed audio will be available as virtual microphone');
+    } else {
+      console.log('Microphone routing disabled');
+    }
+    
+    return this.virtualMicStream;
+  }
+
+  // Set the microphone output gain (volume control for the virtual mic)
+  setMicrophoneGain(gain) {
+    if (this.micGainNode) {
+      // Clamp gain between 0 and 2 for safety
+      const clampedGain = Math.max(0, Math.min(2, gain));
+      this.micGainNode.gain.value = clampedGain;
+      console.log(`Microphone output gain set to: ${clampedGain}`);
+    }
+  }
+
+  // Get the virtual microphone stream for use with Speech Recognition API
+  getVirtualMicrophoneStream() {
+    if (!this.isInitialized || !this.virtualMicStream) {
+      console.warn('Virtual microphone stream not available - processor not initialized');
+      return null;
+    }
+    
+    return this.virtualMicStream;
+  }
+
+  // Check if microphone routing is available and enabled
+  isMicrophoneRoutingEnabled() {
+    return this.isMicRoutingEnabled && this.virtualMicStream !== null;
+  }
+
+  // Get audio metrics for monitoring
+  getAudioMetrics() {
+    if (!this.analyser) {
+      return null;
+    }
+    
+    const bufferLength = this.analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    this.analyser.getByteFrequencyData(dataArray);
+    
+    // Calculate RMS (Root Mean Square) for volume level
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      sum += dataArray[i] * dataArray[i];
+    }
+    const rms = Math.sqrt(sum / bufferLength);
+    const volume = rms / 255; // Normalize to 0-1
+    
+    return {
+      volume: volume,
+      frequencyData: dataArray,
+      bufferLength: bufferLength
+    };
   }
 
   // Update equalizer settings
@@ -161,6 +244,9 @@ class AudioProcessor {
     // Stop visualizer
     this.stopVisualizer();
     
+    // Disable microphone routing
+    this.isMicRoutingEnabled = false;
+    
     // Close audio context if it exists and we created it
     if (this.audioContext) {
       try {
@@ -178,6 +264,10 @@ class AudioProcessor {
           this.inputNode.disconnect();
         }
         
+        if (this.micGainNode) {
+          this.micGainNode.disconnect();
+        }
+        
         if (this.filters) {
           this.filters.forEach(filter => {
             try { filter.disconnect(); } catch (e) {}
@@ -192,6 +282,9 @@ class AudioProcessor {
       this.outputNode = null;
       this.filters = [];
       this.analyser = null;
+      this.microphoneDestination = null;
+      this.virtualMicStream = null;
+      this.micGainNode = null;
       this.isInitialized = false;
     }
   }

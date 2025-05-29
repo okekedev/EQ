@@ -6,24 +6,97 @@
   <link rel="stylesheet" href="css/popup.css">
   <link rel="stylesheet" href="css/notifications.css">
   <style>
-    /* Added styles for EQ controls */
-    .control-panel {
+    /* Enhanced styles for API interception */
+    .api-interception-controls {
+      margin-top: 10px;
+      padding: 12px;
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      border-radius: var(--border-radius);
+      color: white;
       display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .api-interception-controls h4 {
+      margin: 0;
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+    }
+    
+    .api-interception-status {
+      display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: var(--spacing-md);
+      font-size: var(--font-size-xs);
     }
     
-    .control-panel .checkbox-group {
+    .status-badge.api-intercepted {
+      background: linear-gradient(135deg, #ff6b35, #f7931e);
+      color: white;
+      font-weight: bold;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    
+    .magic-indicator {
+      display: inline-block;
+      margin-left: 5px;
+      animation: sparkle 1s infinite;
+    }
+    
+    @keyframes sparkle {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.2); }
+    }
+    
+    .test-button {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: var(--font-size-xs);
+      cursor: pointer;
+    }
+    
+    .test-button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    
+    /* Enhanced checkbox styling */
+    .magic-checkbox {
+      accent-color: #ff6b35;
+    }
+    
+    /* Status indicator enhancements */
+    .recognition-status {
+      margin: 8px 0;
       display: flex;
       align-items: center;
-      gap: var(--spacing-sm);
+      gap: 8px;
     }
     
-    /* Style for disabled sliders */
-    .eq-slider-group.disabled input[type="range"] {
-      opacity: 0.5;
-      pointer-events: none;
+    .status-badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: var(--font-size-xs);
+      background-color: var(--disabled-color);
+      color: white;
+      transition: all 0.3s ease;
+    }
+    
+    .status-badge.virtual-mic {
+      background-color: var(--primary-color);
+    }
+    
+    .status-badge.default-mic {
+      background-color: var(--secondary-color);
     }
   </style>
 </head>
@@ -41,9 +114,40 @@
       <section class="section" id="capture-section">
         <h2>Audio Capture</h2>
         <div class="control-panel">
-          <button id="start-capture-btn" class="btn primary">Start Capture</button>
+          <button id="start-capture-btn" class="btn primary">🎯 Start Magic Capture</button>
           <button id="stop-capture-btn" class="btn secondary" disabled>Stop Capture</button>
         </div>
+        
+        <!-- API Interception Controls -->
+        <div class="api-interception-controls">
+          <h4>🎯 API Interception Magic</h4>
+          <div class="checkbox-group">
+            <input type="checkbox" id="use-api-interception-checkbox" class="magic-checkbox" checked>
+            <label for="use-api-interception-checkbox">Enable API interception (Make Speech Recognition use EQ-processed audio)</label>
+          </div>
+          <div class="api-interception-status">
+            <span id="api-interception-status" class="status-badge">API Interception: READY</span>
+            <button id="test-api-interception-btn" class="test-button">🧪 Test</button>
+          </div>
+        </div>
+        
+        <!-- Virtual Microphone Controls (Enhanced) -->
+        <div class="virtual-mic-controls">
+          <div class="speech-slider">
+            <span class="speech-label">Mic Gain</span>
+            <input type="range" min="0" max="2" step="0.1" value="1" class="slider" id="virtual-mic-gain">
+            <span class="speech-value">1.0</span>
+          </div>
+          
+          <!-- Volume Meter -->
+          <div class="volume-meter-container">
+            <label>Audio Level:</label>
+            <div class="volume-meter-track">
+              <div id="volume-meter" class="volume-meter">0%</div>
+            </div>
+          </div>
+        </div>
+        
         <div class="visualizer-container">
           <canvas id="audio-visualizer"></canvas>
         </div>
@@ -55,7 +159,7 @@
           <button id="toggle-equalizer-btn" class="btn icon-btn" title="Toggle Equalizer">▼</button>
         </h2>
         <div class="equalizer-container">
-          <!-- Added EQ controls panel -->
+          <!-- EQ controls panel -->
           <div class="control-panel">
             <div class="checkbox-group">
               <input type="checkbox" id="eq-enabled-checkbox" checked>
@@ -128,6 +232,13 @@
           <!-- Recognition control panel -->
           <div class="control-panel">
             <button id="toggle-recognition-button" class="btn primary">Start Recognition</button>
+          </div>
+          
+          <!-- Enhanced Recognition Status -->
+          <div class="recognition-status">
+            <span>Audio Source:</span>
+            <span id="recognition-source-indicator" class="status-badge">Ready</span>
+            <span id="magic-indicator" class="magic-indicator" style="display: none;">✨</span>
           </div>
           
           <div class="transcript-container">
@@ -217,7 +328,7 @@
 
     <footer>
       <button id="settings-btn" class="btn icon-btn" title="Settings">⚙️</button>
-      <div class="version">v1.0.0</div>
+      <div class="version">v1.0.0 🎯 Magic Edition</div>
     </footer>
   </div>
 
@@ -229,6 +340,17 @@
         <button id="close-settings-btn" class="btn icon-btn">×</button>
       </div>
       <div class="modal-body">
+        <div class="settings-section">
+          <h3>🎯 API Interception Magic</h3>
+          <div class="checkbox-group">
+            <input type="checkbox" id="enable-api-interception-by-default" checked>
+            <label for="enable-api-interception-by-default">Enable API interception by default</label>
+          </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="show-interception-notifications" checked>
+            <label for="show-interception-notifications">Show interception success notifications</label>
+          </div>
+        </div>
         <div class="settings-section">
           <h3>Theme</h3>
           <div class="theme-selector">
@@ -247,13 +369,14 @@
             <input type="checkbox" id="compact-mode-checkbox">
             <label for="compact-mode-checkbox">Compact mode</label>
           </div>
+          <div class="checkbox-group">
+            <input type="checkbox" id="enable-audio-monitoring-checkbox" checked>
+            <label for="enable-audio-monitoring-checkbox">Enable audio level monitoring</label>
+          </div>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- Debug Module (Optional) -->
-  <script src="js/debug-module.js"></script>
 
   <!-- Core Scripts -->
   <script src="js/storage-manager.js"></script>
