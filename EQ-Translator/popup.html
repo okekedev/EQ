@@ -4,203 +4,88 @@
   <meta charset="utf-8">
   <title>EQ Translator</title>
   <link rel="stylesheet" href="css/popup.css">
-  <link rel="stylesheet" href="css/notifications.css">
-  <style>
-    /* Enhanced styles for API interception */
-    .api-interception-controls {
-      margin-top: 10px;
-      padding: 12px;
-      background: linear-gradient(135deg, #ff6b35, #f7931e);
-      border-radius: var(--border-radius);
-      color: white;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    
-    .api-interception-controls h4 {
-      margin: 0;
-      font-size: var(--font-size-sm);
-      font-weight: 600;
-    }
-    
-    .api-interception-status {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: var(--font-size-xs);
-    }
-    
-    .status-badge.api-intercepted {
-      background: linear-gradient(135deg, #ff6b35, #f7931e);
-      color: white;
-      font-weight: bold;
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.7; }
-      100% { opacity: 1; }
-    }
-    
-    .magic-indicator {
-      display: inline-block;
-      margin-left: 5px;
-      animation: sparkle 1s infinite;
-    }
-    
-    @keyframes sparkle {
-      0%, 100% { transform: rotate(0deg) scale(1); }
-      50% { transform: rotate(180deg) scale(1.2); }
-    }
-    
-    .test-button {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: var(--font-size-xs);
-      cursor: pointer;
-    }
-    
-    .test-button:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    
-    /* Enhanced checkbox styling */
-    .magic-checkbox {
-      accent-color: #ff6b35;
-    }
-    
-    /* Status indicator enhancements */
-    .recognition-status {
-      margin: 8px 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .status-badge {
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: var(--font-size-xs);
-      background-color: var(--disabled-color);
-      color: white;
-      transition: all 0.3s ease;
-    }
-    
-    .status-badge.virtual-mic {
-      background-color: var(--primary-color);
-    }
-    
-    .status-badge.default-mic {
-      background-color: var(--secondary-color);
-    }
-  </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>EQ Translator</h1>
-      <div class="status-indicator">
+      <div class="status">
         <span id="status-text">Ready</span>
         <span id="status-icon" class="status-icon"></span>
       </div>
     </header>
 
     <main>
-      <section class="section" id="capture-section">
+      <!-- Audio Capture Section -->
+      <section class="section">
         <h2>Audio Capture</h2>
-        <div class="control-panel">
-          <button id="start-capture-btn" class="btn primary">🎯 Start Magic Capture</button>
-          <button id="stop-capture-btn" class="btn secondary" disabled>Stop Capture</button>
+        <div class="controls">
+          <button id="start-capture" class="btn primary">🎯 Start Capture</button>
+          <button id="stop-capture" class="btn secondary" disabled>Stop</button>
         </div>
         
-        <!-- API Interception Controls -->
-        <div class="api-interception-controls">
-          <h4>🎯 API Interception Magic</h4>
-          <div class="checkbox-group">
-            <input type="checkbox" id="use-api-interception-checkbox" class="magic-checkbox" checked>
-            <label for="use-api-interception-checkbox">Enable API interception (Make Speech Recognition use EQ-processed audio)</label>
-          </div>
-          <div class="api-interception-status">
-            <span id="api-interception-status" class="status-badge">API Interception: READY</span>
-            <button id="test-api-interception-btn" class="test-button">🧪 Test</button>
-          </div>
+        <div class="api-controls">
+          <label class="checkbox">
+            <input type="checkbox" id="use-api-interception" checked>
+            Enable API Interception Magic
+          </label>
+          <span id="interception-status" class="badge">Ready</span>
         </div>
         
-        <!-- Virtual Microphone Controls (Enhanced) -->
-        <div class="virtual-mic-controls">
-          <div class="speech-slider">
-            <span class="speech-label">Mic Gain</span>
-            <input type="range" min="0" max="2" step="0.1" value="1" class="slider" id="virtual-mic-gain">
-            <span class="speech-value">1.0</span>
-          </div>
-          
-          <!-- Volume Meter -->
-          <div class="volume-meter-container">
-            <label>Audio Level:</label>
-            <div class="volume-meter-track">
-              <div id="volume-meter" class="volume-meter">0%</div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="visualizer-container">
+        <div class="visualizer">
           <canvas id="audio-visualizer"></canvas>
         </div>
       </section>
 
-      <section class="section" id="equalizer-section">
-        <h2>
-          <span>Equalizer</span>
-          <button id="toggle-equalizer-btn" class="btn icon-btn" title="Toggle Equalizer">▼</button>
-        </h2>
-        <div class="equalizer-container">
-          <!-- EQ controls panel -->
-          <div class="control-panel">
-            <div class="checkbox-group">
-              <input type="checkbox" id="eq-enabled-checkbox" checked>
-              <label for="eq-enabled-checkbox">Enable Equalizer</label>
-            </div>
-            <button id="reset-eq-btn" class="btn small">Reset</button>
+      <!-- Equalizer Section -->
+      <section class="section">
+        <div class="section-header">
+          <h2>Equalizer</h2>
+          <button class="toggle-btn" data-section="equalizer">▼</button>
+        </div>
+        <div class="section-content" id="equalizer-content">
+          <div class="controls">
+            <label class="checkbox">
+              <input type="checkbox" id="eq-enabled" checked>
+              Enable EQ
+            </label>
+            <button id="eq-reset" class="btn small">Reset</button>
           </div>
           
-          <div class="eq-slider-group">
-            <div class="eq-slider">
-              <span class="eq-label">100 Hz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band1">
-              <span class="eq-value">0 dB</span>
+          <div class="eq-sliders">
+            <div class="eq-band" data-freq="100">
+              <span class="label">100Hz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
-            <div class="eq-slider">
-              <span class="eq-label">250 Hz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band2">
-              <span class="eq-value">0 dB</span>
+            <div class="eq-band" data-freq="250">
+              <span class="label">250Hz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
-            <div class="eq-slider">
-              <span class="eq-label">500 Hz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band3">
-              <span class="eq-value">0 dB</span>
+            <div class="eq-band" data-freq="500">
+              <span class="label">500Hz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
-            <div class="eq-slider">
-              <span class="eq-label">1 kHz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band4">
-              <span class="eq-value">0 dB</span>
+            <div class="eq-band" data-freq="1000">
+              <span class="label">1kHz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
-            <div class="eq-slider">
-              <span class="eq-label">4 kHz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band5">
-              <span class="eq-value">0 dB</span>
+            <div class="eq-band" data-freq="4000">
+              <span class="label">4kHz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
-            <div class="eq-slider">
-              <span class="eq-label">8 kHz</span>
-              <input type="range" min="-12" max="12" value="0" class="slider" id="eq-band6">
-              <span class="eq-value">0 dB</span>
+            <div class="eq-band" data-freq="8000">
+              <span class="label">8kHz</span>
+              <input type="range" min="-12" max="12" value="0" class="slider vertical">
+              <span class="value">0dB</span>
             </div>
           </div>
-          <div class="eq-presets">
+          
+          <div class="presets">
             <button class="btn small" data-preset="flat">Flat</button>
             <button class="btn small" data-preset="bass">Bass</button>
             <button class="btn small" data-preset="vocal">Vocal</button>
@@ -209,15 +94,15 @@
         </div>
       </section>
 
-      <section class="section" id="recognition-section">
-        <h2>
-          <span>Speech Recognition</span>
-          <button id="toggle-recognition-btn" class="btn icon-btn" title="Toggle Recognition">▼</button>
-        </h2>
-        <div class="recognition-container">
-          <div class="language-selector">
-            <label for="source-language">Source Language:</label>
-            <select id="source-language" class="select">
+      <!-- Speech Recognition Section -->
+      <section class="section">
+        <div class="section-header">
+          <h2>Speech Recognition</h2>
+          <button class="toggle-btn" data-section="recognition">▼</button>
+        </div>
+        <div class="section-content" id="recognition-content">
+          <div class="controls">
+            <select id="source-language">
               <option value="en-US">English (US)</option>
               <option value="es-ES">Spanish</option>
               <option value="fr-FR">French</option>
@@ -225,41 +110,42 @@
               <option value="it-IT">Italian</option>
               <option value="ja-JP">Japanese</option>
               <option value="ko-KR">Korean</option>
-              <option value="zh-CN">Chinese (Simplified)</option>
+              <option value="zh-CN">Chinese</option>
             </select>
+            <button id="toggle-recognition" class="btn primary">Start Recognition</button>
+            <button id="check-mic" class="btn small">🎤 Check Mic</button>
           </div>
           
-          <!-- Recognition control panel -->
-          <div class="control-panel">
-            <button id="toggle-recognition-button" class="btn primary">Start Recognition</button>
+          <div class="status-row">
+            <span>Source: <span id="recognition-source" class="badge">Ready</span></span>
+            <span id="magic-indicator" class="magic">✨</span>
           </div>
           
-          <!-- Enhanced Recognition Status -->
-          <div class="recognition-status">
-            <span>Audio Source:</span>
-            <span id="recognition-source-indicator" class="status-badge">Ready</span>
-            <span id="magic-indicator" class="magic-indicator" style="display: none;">✨</span>
+          <div id="permission-help" class="help-box" style="display: none;">
+            <h4>🎤 Need Microphone Access?</h4>
+            <p>Look for the microphone icon (🎤) in your address bar and click "Allow"</p>
+            <button id="hide-help" class="btn small">Got it!</button>
           </div>
           
-          <div class="transcript-container">
-            <div class="transcript-header">
+          <div class="transcript-box">
+            <div class="box-header">
               <h3>Transcript</h3>
-              <button id="clear-transcript-btn" class="btn small">Clear</button>
+              <button id="clear-transcript" class="btn small">Clear</button>
             </div>
-            <div class="transcript" id="transcript"></div>
+            <div id="transcript" class="content"></div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="translation-section">
-        <h2>
-          <span>Translation</span>
-          <button id="toggle-translation-btn" class="btn icon-btn" title="Toggle Translation">▼</button>
-        </h2>
-        <div class="translation-container">
-          <div class="language-selector">
-            <label for="target-language">Target Language:</label>
-            <select id="target-language" class="select">
+      <!-- Translation Section -->
+      <section class="section">
+        <div class="section-header">
+          <h2>Translation</h2>
+          <button class="toggle-btn" data-section="translation">▼</button>
+        </div>
+        <div class="section-content" id="translation-content">
+          <div class="controls">
+            <select id="target-language">
               <option value="en">English</option>
               <option value="es" selected>Spanish</option>
               <option value="fr">French</option>
@@ -267,128 +153,76 @@
               <option value="it">Italian</option>
               <option value="ja">Japanese</option>
               <option value="ko">Korean</option>
-              <option value="zh">Chinese (Simplified)</option>
+              <option value="zh">Chinese</option>
             </select>
+            <label class="checkbox">
+              <input type="checkbox" id="auto-translate" checked>
+              Auto-translate
+            </label>
+            <button id="translate-btn" class="btn small">Translate</button>
           </div>
-          <div class="control-panel">
-            <div class="checkbox-group">
-              <input type="checkbox" id="auto-translate-checkbox" checked>
-              <label for="auto-translate-checkbox">Auto-translate</label>
-            </div>
-            <button id="translate-btn" class="btn small" disabled>Translate</button>
-          </div>
-          <div class="translation-result-container">
-            <div class="translation-header">
+          
+          <div class="translation-box">
+            <div class="box-header">
               <h3>Translation</h3>
-              <button id="copy-translation-btn" class="btn small">Copy</button>
+              <button id="copy-translation" class="btn small">Copy</button>
             </div>
-            <div class="translation-result" id="translation-result"></div>
+            <div id="translation-result" class="content"></div>
           </div>
         </div>
       </section>
 
-      <section class="section" id="speech-section">
-        <h2>
-          <span>Speech Synthesis</span>
-          <button id="toggle-speech-btn" class="btn icon-btn" title="Toggle Speech Synthesis">▼</button>
-        </h2>
-        <div class="speech-container">
-          <div class="voice-selector">
-            <label for="voice-select">Voice:</label>
-            <select id="voice-select" class="select"></select>
+      <!-- Speech Synthesis Section -->
+      <section class="section">
+        <div class="section-header">
+          <h2>Speech Synthesis</h2>
+          <button class="toggle-btn" data-section="speech">▼</button>
+        </div>
+        <div class="section-content" id="speech-content">
+          <div class="controls">
+            <select id="voice-select"></select>
+            <label class="checkbox">
+              <input type="checkbox" id="auto-speak" checked>
+              Auto-speak
+            </label>
+            <button id="speak-btn" class="btn small">Speak</button>
+            <button id="stop-speech" class="btn small">Stop</button>
           </div>
+          
           <div class="speech-controls">
-            <div class="speech-slider">
-              <span class="speech-label">Rate</span>
-              <input type="range" min="0.5" max="2" step="0.1" value="1" class="slider" id="speech-rate">
-              <span class="speech-value">1.0</span>
+            <div class="slider-group">
+              <label>Rate: <span id="rate-value">1.0</span></label>
+              <input type="range" min="0.5" max="2" step="0.1" value="1" id="speech-rate">
             </div>
-            <div class="speech-slider">
-              <span class="speech-label">Pitch</span>
-              <input type="range" min="0.5" max="2" step="0.1" value="1" class="slider" id="speech-pitch">
-              <span class="speech-value">1.0</span>
+            <div class="slider-group">
+              <label>Pitch: <span id="pitch-value">1.0</span></label>
+              <input type="range" min="0.5" max="2" step="0.1" value="1" id="speech-pitch">
             </div>
-            <div class="speech-slider">
-              <span class="speech-label">Volume</span>
-              <input type="range" min="0" max="1" step="0.1" value="1" class="slider" id="speech-volume">
-              <span class="speech-value">1.0</span>
+            <div class="slider-group">
+              <label>Volume: <span id="volume-value">1.0</span></label>
+              <input type="range" min="0" max="1" step="0.1" value="1" id="speech-volume">
             </div>
-          </div>
-          <div class="control-panel">
-            <div class="checkbox-group">
-              <input type="checkbox" id="auto-speak-checkbox" checked>
-              <label for="auto-speak-checkbox">Auto-speak translation</label>
-            </div>
-            <button id="speak-btn" class="btn small" disabled>Speak</button>
-            <button id="stop-speech-btn" class="btn small" disabled>Stop</button>
           </div>
         </div>
       </section>
     </main>
 
     <footer>
-      <button id="settings-btn" class="btn icon-btn" title="Settings">⚙️</button>
       <div class="version">v1.0.0 🎯 Magic Edition</div>
     </footer>
   </div>
 
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Settings</h2>
-        <button id="close-settings-btn" class="btn icon-btn">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="settings-section">
-          <h3>🎯 API Interception Magic</h3>
-          <div class="checkbox-group">
-            <input type="checkbox" id="enable-api-interception-by-default" checked>
-            <label for="enable-api-interception-by-default">Enable API interception by default</label>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="show-interception-notifications" checked>
-            <label for="show-interception-notifications">Show interception success notifications</label>
-          </div>
-        </div>
-        <div class="settings-section">
-          <h3>Theme</h3>
-          <div class="theme-selector">
-            <button class="btn small theme-btn" data-theme="light">Light</button>
-            <button class="btn small theme-btn" data-theme="dark">Dark</button>
-            <button class="btn small theme-btn" data-theme="system">System</button>
-          </div>
-        </div>
-        <div class="settings-section">
-          <h3>Interface</h3>
-          <div class="checkbox-group">
-            <input type="checkbox" id="show-visualizer-checkbox" checked>
-            <label for="show-visualizer-checkbox">Show audio visualizer</label>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="compact-mode-checkbox">
-            <label for="compact-mode-checkbox">Compact mode</label>
-          </div>
-          <div class="checkbox-group">
-            <input type="checkbox" id="enable-audio-monitoring-checkbox" checked>
-            <label for="enable-audio-monitoring-checkbox">Enable audio level monitoring</label>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Notification Container -->
+  <div id="notifications"></div>
 
-  <!-- Core Scripts -->
-  <script src="js/storage-manager.js"></script>
-  <script src="js/audio-processor.js"></script>
-  <script src="js/speech-recognition.js"></script>
-  <script src="js/translation-service.js"></script>
-  <script src="js/speech-synthesis.js"></script>
-  <script src="js/visualizer.js"></script>
-  <script src="js/capture-manager.js"></script>
-  <script src="js/ui-controller.js"></script>
-  
-  <!-- Main Popup Script (Must be last) -->
+  <!-- Scripts -->
+  <script src="js/core/storage.js"></script>
+  <script src="js/core/audio-processor.js"></script>
+  <script src="js/core/capture-manager.js"></script>
+  <script src="js/core/speech-recognizer.js"></script>
+  <script src="js/core/translator.js"></script>
+  <script src="js/core/speech-synthesizer.js"></script>
+  <script src="js/core/visualizer.js"></script>
   <script src="js/popup.js"></script>
 </body>
 </html>

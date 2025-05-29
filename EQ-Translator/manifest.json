@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "EQ Translator",
   "version": "1.0.0",
-  "description": "Real-time audio translation with equalization",
+  "description": "Real-time audio translation with equalization and API interception magic",
   "permissions": [
     "tabCapture",
     "storage",
@@ -28,13 +28,6 @@
     "48": "images/icon48.png",
     "128": "images/icon128.png"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["js/audio-passthrough.js"],
-      "run_at": "document_start"
-    }
-  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }
