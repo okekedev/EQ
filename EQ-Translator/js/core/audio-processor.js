@@ -27,7 +27,7 @@ class AudioProcessor {
       this.outputNode = this.audioContext.createGain();
       this.virtualMicDestination = this.audioContext.createMediaStreamDestination();
       
-      // Create EQ (6-band equalizer)
+      // Create EQ (5-band equalizer)
       this.createEqualizer();
       
       // Connect the audio chain
@@ -51,14 +51,13 @@ class AudioProcessor {
     // Clear existing EQ
     this.eqNodes = [];
     
-    // EQ bands: 100Hz, 250Hz, 500Hz, 1kHz, 4kHz, 8kHz
+    // EQ bands: 100Hz, 250Hz, 500Hz, 1kHz, 4kHz (5 bands instead of 6)
     const bands = [
       { type: 'lowshelf', frequency: 100, gain: 0 },
       { type: 'peaking', frequency: 250, Q: 1, gain: 0 },
       { type: 'peaking', frequency: 500, Q: 1, gain: 0 },
       { type: 'peaking', frequency: 1000, Q: 1, gain: 0 },
-      { type: 'peaking', frequency: 4000, Q: 1, gain: 0 },
-      { type: 'highshelf', frequency: 8000, gain: 0 }
+      { type: 'highshelf', frequency: 4000, gain: 0 }  // Removed the 8kHz band
     ];
     
     bands.forEach(band => {

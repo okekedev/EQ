@@ -22,11 +22,7 @@ class EQTranslator {
       this.components.translator = new Translator();
       this.components.speechSynthesizer = new SpeechSynthesizer();
       
-      // Initialize visualizer
-      const canvas = document.getElementById('audio-visualizer');
-      if (canvas) {
-        this.components.visualizer = new Visualizer(canvas);
-      }
+      // Visualizer removed - no longer needed
       
       // Initialize speech recognizer
       try {
@@ -56,7 +52,7 @@ class EQTranslator {
   }
 
   setupEventListeners() {
-    // Main translation button
+    // Main translation button - updated selector
     const toggleBtn = document.getElementById('toggle-translation');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', () => this.toggleTranslation());
@@ -100,7 +96,7 @@ class EQTranslator {
       });
     });
     
-    // EQ controls
+    // EQ controls - updated for 5 bands
     document.querySelectorAll('.eq-band input').forEach((slider, index) => {
       slider.addEventListener('input', (e) => this.updateEQBand(index, e.target.value));
     });
@@ -138,19 +134,12 @@ class EQTranslator {
     if (this.components.captureManager) {
       this.components.captureManager.onCaptureStarted = () => {
         this.updateInputStatus('🎯 Magic Active');
-        if (this.components.visualizer) {
-          const analyser = this.components.audioProcessor.getAnalyser();
-          if (analyser) {
-            this.components.visualizer.start(analyser);
-          }
-        }
+        // Visualizer removed - no longer needed
       };
       
       this.components.captureManager.onCaptureStopped = () => {
         this.updateInputStatus('Ready');
-        if (this.components.visualizer) {
-          this.components.visualizer.stop();
-        }
+        // Visualizer removed - no longer needed
       };
       
       this.components.captureManager.onCaptureError = (error) => {
@@ -295,7 +284,7 @@ class EQTranslator {
   updateTranslationButton() {
     const button = document.getElementById('toggle-translation');
     if (button) {
-      button.textContent = this.state.isTranslating ? 'Stop Translation' : '🎯 Start Translation';
+      button.textContent = this.state.isTranslating ? '🛑 Stop Translation' : '🎯 Start Translation';
     }
   }
 
@@ -372,7 +361,7 @@ class EQTranslator {
     }
   }
 
-  // EQ Methods
+  // EQ Methods - Updated for 5 bands
   updateEQBand(index, value) {
     const band = document.querySelectorAll('.eq-band')[index];
     const valueDisplay = band.querySelector('.eq-value');
@@ -388,18 +377,20 @@ class EQTranslator {
 
   applyEQPreset(preset) {
     const presets = {
-      flat: [0, 0, 0, 0, 0, 0],
-      bass: [6, 3, 0, -1, -2, 0],
-      vocal: [-2, -1, 2, 4, 0, -2],
-      treble: [-3, -1, 0, 2, 4, 6]
+      flat: [0, 0, 0, 0, 0],      // 5 bands instead of 6
+      bass: [6, 3, 0, -1, -2],    // 5 bands instead of 6
+      vocal: [-2, -1, 2, 4, 0],   // 5 bands instead of 6
+      treble: [-3, -1, 0, 2, 4]   // 5 bands instead of 6
     };
     
     const values = presets[preset] || presets.flat;
     const sliders = document.querySelectorAll('.eq-band input');
     
     sliders.forEach((slider, index) => {
-      slider.value = values[index];
-      this.updateEQBand(index, values[index]);
+      if (values[index] !== undefined) {
+        slider.value = values[index];
+        this.updateEQBand(index, values[index]);
+      }
     });
   }
 
