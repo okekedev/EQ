@@ -6,10 +6,13 @@
   "permissions": [
     "tabCapture",
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
-    "https://translation.googleapis.com/*"
+    "https://translation.googleapis.com/*",
+    "http://*/*",
+    "https://*/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -30,5 +33,11 @@
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["js/core/*.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
