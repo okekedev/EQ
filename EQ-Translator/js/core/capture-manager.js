@@ -1,15 +1,18 @@
-// CaptureManager - Enhanced for Audio EQ Integration
+// CaptureManager - Handles all tab audio capture functionality
 
 class CaptureManager {
-  constructor(audioProcessor = null) {
+  constructor() {
     this.activeStream = null;
     this.audioContext = null;
     this.mediaStreamSource = null;
     this.audioDestination = null;
     this.activeTabId = null;
     this.isCapturing = false;
-    this.audioProcessor = audioProcessor;
-    this.audioPassthrough = true;
+    this.audioProcessor = null;
+    this.onCaptureStarted = null;
+    this.onCaptureStopped = null;
+    this.onCaptureError = null;
+    this.audioPassthrough = true; // Enable or disable passing audio through to output
     
     // Callback properties to match popup.js usage
     this.onStart = null;
@@ -18,9 +21,55 @@ class CaptureManager {
   }
 
   /**
-   * Start capturing audio from the specified tab with API interception
+   * Initialize with an audio processor instance
+   * @param {AudioProcessor} audioProcessor - The audio processor instance
+   */
+  initialize(audioProcessor) {
+    this.audioProcessor = audioProcessor;
+    return this;
+  }
+
+  /**
+   * Set callback for when capture starts
+   * @param {Function} callback - The callback function
+   */
+  setOnCaptureStarted(callback) {
+    this.onCaptureStarted = callback;
+    return this;
+  }
+
+  /**
+   * Set callback for when capture stops
+   * @param {Function} callback - The callback function
+   */
+  setOnCaptureStopped(callback) {
+    this.onCaptureStopped = callback;
+    return this;
+  }
+
+  /**
+   * Set callback for capture errors
+   * @param {Function} callback - The callback function
+   */
+  setOnCaptureError(callback) {
+    this.onCaptureError = callback;
+    return this;
+  }
+
+  /**
+   * Enable or disable audio passthrough
+   * @param {boolean} enabled - Whether audio should be passed through to output
+   */
+  setAudioPassthrough(enabled) {
+    this.audioPassthrough = enabled;
+    this.updateAudioRouting();
+    return this;
+  }
+
+  /**
+   * Start capturing audio from the specified tab
    * @param {number} tabId - The ID of the tab to capture
-   * @param {boolean} useAPIInterception - Whether to enable API interception
+   * @param {boolean} useAPIInterception - Whether to enable API interception (for compatibility)
    * @returns {Promise<boolean>} - Whether capture was successful
    */
   async start(tabId, useAPIInterception = true) {
@@ -28,7 +77,7 @@ class CaptureManager {
       // Stop any existing capture
       await this.stop();
       
-      console.log(`🎯 Starting capture for tab ${tabId}, API interception: ${useAPIInterception}`);
+      console.log(`🎯 Starting capture for tab ${tabId}`);
       
       // Store the active tab ID
       this.activeTabId = tabId;
@@ -42,8 +91,7 @@ class CaptureManager {
       
       console.log('🎯 Tab audio captured successfully:', {
         streamId: stream.id,
-        audioTracks: stream.getAudioTracks().length,
-        videoTracks: stream.getVideoTracks().length
+        audioTracks: stream.getAudioTracks().length
       });
       
       // Store the stream
@@ -61,6 +109,12 @@ class CaptureManager {
         console.log('🎯 AudioContext resumed');
       }
       
+      // Create media stream source
+      this.mediaStreamSource = this.audioContext.createMediaStreamSource(stream);
+      
+      // Create destination for audio passthrough
+      this.audioDestination = this.audioContext.createMediaStreamDestination();
+      
       // Initialize audio processor with the stream
       if (this.audioProcessor) {
         console.log('🎯 Initializing audio processor...');
@@ -72,17 +126,26 @@ class CaptureManager {
           console.log('🎯 API interception started');
         }
         
-        // Setup audio routing for passthrough
-        this._setupAudioRouting();
+        // Connect the processor's output to the destination if passthrough is enabled
+        if (this.audioPassthrough) {
+          const outputNode = this.audioProcessor.getOutputNode();
+          if (outputNode) {
+            outputNode.connect(this.audioDestination);
+            
+            // Create audio element for playback
+            this._createAudioElement(this.audioDestination.stream);
+            console.log('🔊 EQ-processed audio connected for playback');
+          }
+        }
       } else {
         console.warn('⚠️ No audio processor provided - basic passthrough only');
-        // If no processor, setup basic passthrough
-        this.mediaStreamSource = this.audioContext.createMediaStreamSource(stream);
-        this.audioDestination = this.audioContext.createMediaStreamDestination();
-        
+        // If no processor, connect source directly to destination for passthrough
         if (this.audioPassthrough) {
           this.mediaStreamSource.connect(this.audioDestination);
+          
+          // Create audio element for playback
           this._createAudioElement(this.audioDestination.stream);
+          console.log('🔊 Basic audio connected for playback');
         }
       }
       
@@ -92,7 +155,10 @@ class CaptureManager {
       // Notify background script
       this._notifyBackground('captureStarted', { tabId });
       
-      // Call the start callback
+      // Call the capture started callbacks
+      if (this.onCaptureStarted) {
+        this.onCaptureStarted();
+      }
       if (this.onStart) {
         this.onStart();
       }
@@ -107,7 +173,10 @@ class CaptureManager {
       this.isCapturing = false;
       this.activeTabId = null;
       
-      // Call error callback
+      // Call error callbacks
+      if (this.onCaptureError) {
+        this.onCaptureError(error);
+      }
       if (this.onError) {
         this.onError(error);
       }
@@ -144,8 +213,22 @@ class CaptureManager {
         this.activeStream = null;
       }
       
-      // Clean up audio elements and connections
-      this._cleanupAudio();
+      // Clean up audio element
+      this._removeAudioElement();
+      
+      // Clean up audio context connections
+      if (this.mediaStreamSource) {
+        try {
+          this.mediaStreamSource.disconnect();
+        } catch (e) {
+          // Ignore disconnect errors
+        }
+        this.mediaStreamSource = null;
+      }
+      
+      if (this.audioDestination) {
+        this.audioDestination = null;
+      }
       
       // Update state
       this.isCapturing = false;
@@ -154,7 +237,10 @@ class CaptureManager {
       // Notify background script
       this._notifyBackground('captureStopped');
       
-      // Call the stop callback
+      // Call the capture stopped callbacks
+      if (this.onCaptureStopped) {
+        this.onCaptureStopped();
+      }
       if (this.onStop) {
         this.onStop();
       }
@@ -169,7 +255,10 @@ class CaptureManager {
       this.isCapturing = false;
       this.activeTabId = null;
       
-      // Call error callback
+      // Call error callbacks
+      if (this.onCaptureError) {
+        this.onCaptureError(error);
+      }
       if (this.onError) {
         this.onError(error);
       }
@@ -179,18 +268,49 @@ class CaptureManager {
   }
 
   /**
-   * Enable or disable audio passthrough
-   * @param {boolean} enabled - Whether audio should be passed through to output
+   * Update audio routing based on current settings
    */
-  setAudioPassthrough(enabled) {
-    this.audioPassthrough = enabled;
+  updateAudioRouting() {
+    if (!this.isCapturing) return;
     
-    if (this.isCapturing) {
-      this._updateAudioRouting();
+    if (this.audioProcessor && this.audioProcessor.getOutputNode()) {
+      const outputNode = this.audioProcessor.getOutputNode();
+      
+      if (this.audioPassthrough) {
+        // Connect for passthrough
+        if (this.audioDestination) {
+          outputNode.connect(this.audioDestination);
+          
+          if (!document.getElementById('eq-audio-passthrough')) {
+            this._createAudioElement(this.audioDestination.stream);
+          }
+        }
+      } else {
+        // Disconnect passthrough
+        try {
+          outputNode.disconnect(this.audioDestination);
+        } catch (e) {
+          // Ignore disconnect errors
+        }
+        this._removeAudioElement();
+      }
+    } else if (this.mediaStreamSource && this.audioDestination) {
+      // Basic audio routing without processor
+      if (this.audioPassthrough) {
+        this.mediaStreamSource.connect(this.audioDestination);
+        
+        if (!document.getElementById('eq-audio-passthrough')) {
+          this._createAudioElement(this.audioDestination.stream);
+        }
+      } else {
+        try {
+          this.mediaStreamSource.disconnect(this.audioDestination);
+        } catch (e) {
+          // Ignore disconnect errors
+        }
+        this._removeAudioElement();
+      }
     }
-    
-    console.log(`🔊 Audio passthrough ${enabled ? 'enabled' : 'disabled'}`);
-    return this;
   }
 
   /**
@@ -257,59 +377,6 @@ class CaptureManager {
   }
 
   /**
-   * Setup audio routing for the processor
-   * @private
-   */
-  _setupAudioRouting() {
-    if (!this.audioProcessor || !this.audioProcessor.outputNode) {
-      console.warn('⚠️ Cannot setup audio routing - no processor output node');
-      return;
-    }
-    
-    // Create destination for passthrough
-    this.audioDestination = this.audioContext.createMediaStreamDestination();
-    
-    // Connect processor output to destination if passthrough is enabled
-    if (this.audioPassthrough) {
-      const outputNode = this.audioProcessor.outputNode;
-      outputNode.connect(this.audioDestination);
-      this._createAudioElement(this.audioDestination.stream);
-      console.log('🔊 Audio passthrough connected');
-    }
-  }
-
-  /**
-   * Update audio routing based on passthrough setting
-   * @private
-   */
-  _updateAudioRouting() {
-    if (!this.isCapturing || !this.audioDestination) return;
-    
-    const outputNode = this.audioProcessor?.outputNode || this.mediaStreamSource;
-    
-    if (this.audioPassthrough) {
-      // Connect for passthrough
-      if (outputNode) {
-        outputNode.connect(this.audioDestination);
-        
-        if (!document.getElementById('eq-audio-passthrough')) {
-          this._createAudioElement(this.audioDestination.stream);
-        }
-      }
-    } else {
-      // Disconnect passthrough
-      if (outputNode) {
-        try {
-          outputNode.disconnect(this.audioDestination);
-        } catch (e) {
-          // Ignore disconnect errors
-        }
-      }
-      this._removeAudioElement();
-    }
-  }
-
-  /**
    * Create an audio element for passthrough playback
    * @param {MediaStream} stream - The stream to play
    * @private
@@ -321,8 +388,21 @@ class CaptureManager {
     audioElement.id = 'eq-audio-passthrough';
     audioElement.srcObject = stream;
     audioElement.autoplay = true;
-    audioElement.volume = 0.8; // Slightly lower to prevent feedback
+    audioElement.volume = 1.0; // Full volume to hear EQ effects clearly
     audioElement.style.display = 'none';
+    
+    // Add event listeners for debugging
+    audioElement.addEventListener('loadedmetadata', () => {
+      console.log('🔊 Audio element loaded and ready to play');
+    });
+    
+    audioElement.addEventListener('play', () => {
+      console.log('🔊 Audio playback started - EQ effects should be audible!');
+    });
+    
+    audioElement.addEventListener('error', (e) => {
+      console.error('🚫 Audio element error:', e);
+    });
     
     document.body.appendChild(audioElement);
     console.log('🔊 Audio passthrough element created');
@@ -340,28 +420,6 @@ class CaptureManager {
       audioElement.remove();
       console.log('🔊 Audio passthrough element removed');
     }
-  }
-
-  /**
-   * Clean up all audio connections and elements
-   * @private
-   */
-  _cleanupAudio() {
-    // Remove audio element
-    this._removeAudioElement();
-    
-    // Disconnect audio nodes
-    if (this.mediaStreamSource) {
-      try {
-        this.mediaStreamSource.disconnect();
-      } catch (e) {
-        // Ignore disconnect errors
-      }
-      this.mediaStreamSource = null;
-    }
-    
-    // Clear destination
-    this.audioDestination = null;
   }
 
   /**

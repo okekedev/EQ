@@ -2,7 +2,7 @@
 class Storage {
   constructor() {
     this.defaults = {
-      eq: [0, 0, 0, 0, 0],
+      eq: [0, 0, 0, 0, 0, 0, 0, 0],
       eqEnabled: true
     };
   }

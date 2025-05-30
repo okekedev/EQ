@@ -6,7 +6,8 @@
   "permissions": [
     "tabCapture",
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "http://*/*",
@@ -21,8 +22,7 @@
     }
   },
   "background": {
-    "service_worker": "js/background.js",
-    "type": "module"
+    "service_worker": "js/background.js"
   },
   "icons": {
     "16": "images/icon16.png",

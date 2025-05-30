@@ -1,18 +1,16 @@
-// Audio Equalizer - Minimalist Single Section Design
+// Audio Equalizer - Enhanced with Background Persistence
 
 class AudioEqualizer {
   constructor() {
     this.components = {};
-    this.visualizer = {
-      canvas: null,
-      ctx: null,
-      animationId: null,
-      analyser: null
-    };
+    this.visualizer = null;
     this.state = {
       isCapturing: false,
-      shouldBeCapturing: false
+      shouldBeCapturing: false,
+      backgroundActive: false
     };
+    this.retryCount = 0;
+    this.maxRetries = 3;
   }
 
   async init() {
@@ -24,13 +22,22 @@ class AudioEqualizer {
       this.components.audioProcessor = new AudioProcessor();
       this.components.captureManager = new CaptureManager();
       
-      // Initialize components
+      // Initialize capture manager with audio processor
+      this.components.captureManager.initialize(this.components.audioProcessor);
+      
+      this.visualizer = new AudioVisualizer('visualizer-canvas');
+      
+      // Initialize storage
       await this.components.storage.init();
       
       // Setup everything
       this.setupEventListeners();
       this.setupCallbacks();
-      this.setupVisualizer();
+      
+      // Check background state first - IMPORTANT for persistence
+      await this.checkBackgroundState();
+      
+      // Load settings and apply them
       await this.loadSettings();
       
       this.updateStatus('Ready', 'active');
@@ -42,8 +49,39 @@ class AudioEqualizer {
     }
   }
 
+  // Check background EQ state for persistence
+  async checkBackgroundState() {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getEQState' });
+      if (response && response.isActive) {
+        console.log('🎛️ EQ is already active in background on tab:', response.activeTabId);
+        this.state.backgroundActive = true;
+        this.state.isCapturing = true; // UI state
+        this.updateStatus('🎛️ EQ Active (Background)', 'active');
+        
+        // Show notification about background state
+        this.showNotification(
+          'EQ Active', 
+          'EQ is running in background. Toggle off/on to restart audio processing.', 
+          'info'
+        );
+        
+        // Update badge to show EQ is active
+        chrome.runtime.sendMessage({ 
+          action: 'captureStarted', 
+          tabId: response.activeTabId 
+        });
+      } else {
+        this.state.backgroundActive = false;
+      }
+    } catch (error) {
+      console.log('Could not check background state:', error);
+      this.state.backgroundActive = false;
+    }
+  }
+
   setupEventListeners() {
-    // EQ Power Switch - This now controls everything
+    // EQ Power Switch - Now controls everything with background persistence
     const eqToggle = document.getElementById('eq-enabled');
     if (eqToggle) {
       eqToggle.addEventListener('change', (e) => this.toggleEQPower(e.target.checked));
@@ -64,150 +102,82 @@ class AudioEqualizer {
     if (this.components.captureManager) {
       this.components.captureManager.onStart = () => {
         this.state.isCapturing = true;
+        this.state.backgroundActive = true;
         this.updateStatus('🎛️ EQ Active', 'active');
         
-        // Initialize audio processor with the captured stream
-        if (this.components.captureManager.getActiveStream()) {
-          this.components.audioProcessor.initialize(
-            this.components.captureManager.getActiveStream(),
-            this.components.captureManager.getAudioContext()
-          ).then(() => {
-            console.log('🎯 Audio processor initialized with captured stream');
-            this.startVisualizer();
-          }).catch(error => {
-            console.error('Failed to initialize audio processor:', error);
-          });
+        // Start visualizer if audio processor is ready
+        if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
+          console.log('🎯 Audio processor ready, starting visualizer');
+          this.startVisualizer();
         }
+        
+        // Show persistence info
+        this.showNotification(
+          'EQ Started', 
+          'EQ is now active. You can close this popup and EQ will continue running.', 
+          'success'
+        );
       };
       
       this.components.captureManager.onStop = () => {
         this.state.isCapturing = false;
+        this.state.backgroundActive = false;
         this.stopVisualizer();
-        // Auto-restart if EQ should be active
-        if (this.state.shouldBeCapturing) {
-          setTimeout(() => this.ensureCapture(), 1000);
-        } else {
-          this.updateStatus('Ready', 'active');
-        }
+        this.updateStatus('Ready', 'active');
+        
+        // Notify background that EQ stopped
+        chrome.runtime.sendMessage({ action: 'captureStopped' });
       };
       
       this.components.captureManager.onError = (error) => {
-        this.showNotification('Capture Error', error.message, 'error');
+        console.error('Capture manager error:', error);
+        
+        // Provide helpful error messages based on error type
+        let userMessage = error.message;
+        if (error.message.includes('Invalid state')) {
+          userMessage = 'Tab must be playing audio to start EQ. Try starting music/video first.';
+        } else if (error.message.includes('Extension has not been invoked')) {
+          userMessage = 'Please click the extension icon again to activate EQ.';
+        }
+        
+        this.showNotification('Capture Error', userMessage, 'error');
         this.updateStatus('Error', 'error');
         this.stopVisualizer();
-        // Try to restart if EQ should be active
-        if (this.state.shouldBeCapturing) {
-          setTimeout(() => this.ensureCapture(), 2000);
-        }
+        this.state.isCapturing = false;
+        this.state.backgroundActive = false;
       };
     }
   }
 
   // Visualizer Methods
-  setupVisualizer() {
-    this.visualizer.canvas = document.getElementById('visualizer-canvas');
-    if (this.visualizer.canvas) {
-      this.visualizer.ctx = this.visualizer.canvas.getContext('2d');
-      
-      // Set canvas size
-      const rect = this.visualizer.canvas.getBoundingClientRect();
-      this.visualizer.canvas.width = rect.width * 2; // High DPI
-      this.visualizer.canvas.height = rect.height * 2;
-      this.visualizer.ctx.scale(2, 2);
-      
-      // Start with empty visualization
-      this.drawEmptyVisualizer();
-    }
-  }
-
   startVisualizer() {
     if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
-      this.visualizer.analyser = this.components.audioProcessor.getAnalyser();
-      if (this.visualizer.analyser) {
-        this.visualizer.analyser.fftSize = 256;
-        this.animateVisualizer();
+      const analyser = this.components.audioProcessor.getAnalyser();
+      if (analyser && this.visualizer) {
+        this.visualizer.start(analyser);
+        console.log('🎨 Visualizer started with analyser');
+      } else {
+        console.warn('⚠️ No analyser available for visualizer');
       }
+    } else {
+      console.warn('⚠️ Audio processor not ready for visualizer');
     }
   }
 
   stopVisualizer() {
-    if (this.visualizer.animationId) {
-      cancelAnimationFrame(this.visualizer.animationId);
-      this.visualizer.animationId = null;
+    if (this.visualizer) {
+      this.visualizer.stop();
+      console.log('🎨 Visualizer stopped');
     }
-    this.drawEmptyVisualizer();
   }
 
-  animateVisualizer() {
-    if (!this.visualizer.analyser || !this.visualizer.ctx) return;
-    
-    const bufferLength = this.visualizer.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const draw = () => {
-      this.visualizer.animationId = requestAnimationFrame(draw);
-      
-      this.visualizer.analyser.getByteFrequencyData(dataArray);
-      
-      const ctx = this.visualizer.ctx;
-      const canvas = this.visualizer.canvas;
-      const width = canvas.width / 2;
-      const height = canvas.height / 2;
-      
-      // Clear canvas
-      ctx.fillStyle = 'linear-gradient(45deg, #000, #1a1a1a)';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Draw frequency bars
-      const barWidth = width / bufferLength * 2.5;
-      let x = 0;
-      
-      for (let i = 0; i < bufferLength; i++) {
-        const barHeight = (dataArray[i] / 255) * height * 0.8;
-        
-        // Create gradient for each bar
-        const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-        gradient.addColorStop(0, '#00ff88');
-        gradient.addColorStop(0.6, '#0088ff');
-        gradient.addColorStop(1, '#ff0088');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
-        
-        x += barWidth;
-      }
-    };
-    
-    draw();
-  }
-
-  drawEmptyVisualizer() {
-    if (!this.visualizer.ctx) return;
-    
-    const ctx = this.visualizer.ctx;
-    const canvas = this.visualizer.canvas;
-    const width = canvas.width / 2;
-    const height = canvas.height / 2;
-    
-    // Clear with dark gradient
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, '#000');
-    gradient.addColorStop(1, '#1a1a1a');
-    
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-    
-    // Draw placeholder text
-    ctx.fillStyle = '#444';
-    ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Audio visualization will appear here', width / 2, height / 2);
-  }
-
-  // EQ Power Switch Methods - Now controls everything
+  // EQ Power Switch Methods - Enhanced with background persistence
   async toggleEQPower(enabled) {
     try {
-      // Save state
+      // Reset retry count when manually toggling
+      this.retryCount = 0;
+      
+      // Save state to storage for persistence
       this.state.shouldBeCapturing = enabled;
       await this.components.storage.save('eqEnabled', enabled);
       
@@ -225,18 +195,25 @@ class AudioEqualizer {
       
       // Start or stop capture based on EQ state
       if (enabled) {
+        if (this.state.backgroundActive) {
+          // EQ was active in background, restart fresh session
+          console.log('🔄 Restarting EQ session...');
+          await this.stopCapture(); // Stop any existing session
+          await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
+        }
+        
         await this.ensureCapture();
-        this.showNotification('EQ Enabled', 'Audio processing started automatically', 'success');
+        console.log('🎛️ EQ enabled and capture started');
+        
       } else {
         await this.stopCapture();
         this.showNotification('EQ Disabled', 'Audio processing stopped', 'info');
+        console.log('🎛️ EQ disabled');
       }
-      
-      console.log(`🎛️ EQ ${enabled ? 'enabled' : 'disabled'}`);
       
     } catch (error) {
       console.error('Error toggling EQ:', error);
-      this.showNotification('EQ Error', 'Failed to toggle equalizer', 'error');
+      this.showNotification('EQ Error', 'Failed to toggle equalizer: ' + error.message, 'error');
       
       // Revert UI on error
       const checkbox = document.getElementById('eq-enabled');
@@ -244,40 +221,90 @@ class AudioEqualizer {
     }
   }
 
-  // Ensure capture is active when needed
+  // Ensure capture is active when needed - Enhanced error handling
   async ensureCapture() {
     if (this.state.shouldBeCapturing && !this.state.isCapturing) {
+      if (this.retryCount >= this.maxRetries) {
+        console.error('🚫 Max retry attempts reached, stopping capture attempts');
+        this.showNotification(
+          'Capture Failed', 
+          'Unable to start EQ after multiple attempts. Make sure the tab is playing audio.', 
+          'error'
+        );
+        return;
+      }
+      
       try {
+        this.retryCount++;
+        
+        // Get current active tab
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs.length > 0) {
-          // Pass the audio processor to capture manager so it can initialize it
-          await this.components.captureManager.start(tabs[0].id, true);
-          
-          // Verify we have audio context and stream
-          const stream = this.components.captureManager.getActiveStream();
-          const audioContext = this.components.captureManager.getAudioContext();
-          
-          if (stream && audioContext) {
-            console.log('🎯 Audio capture successful:', {
-              streamTracks: stream.getAudioTracks().length,
-              audioContextState: audioContext.state
-            });
-          } else {
-            console.warn('⚠️ Audio capture incomplete - missing stream or context');
-          }
+        if (tabs.length === 0) {
+          throw new Error('No active tab found');
         }
+        
+        const currentTab = tabs[0];
+        console.log('🎯 Attempting to start EQ on tab:', {
+          id: currentTab.id,
+          url: currentTab.url,
+          title: currentTab.title
+        });
+        
+        // Start capture
+        await this.components.captureManager.start(currentTab.id, true);
+        
+        // Reset retry count on success
+        this.retryCount = 0;
+        
+        // Verify we have audio context and stream
+        const stream = this.components.captureManager.getActiveStream();
+        const audioContext = this.components.captureManager.getAudioContext();
+        
+        if (stream && audioContext) {
+          console.log('🎯 Audio capture successful:', {
+            streamTracks: stream.getAudioTracks().length,
+            audioContextState: audioContext.state
+          });
+        } else {
+          console.warn('⚠️ Audio capture incomplete - missing stream or context');
+        }
+        
       } catch (error) {
-        console.error('Failed to ensure capture:', error);
-        this.showNotification('Capture Failed', error.message, 'error');
+        console.error(`Failed to ensure capture (attempt ${this.retryCount}/${this.maxRetries}):`, error);
+        
+        let userMessage = `Attempt ${this.retryCount}: ${error.message}`;
+        if (error.message.includes('Tab must be playing audio')) {
+          userMessage = 'Please start playing audio in this tab first, then try again.';
+        }
+        
+        this.showNotification('Capture Failed', userMessage, 'error');
+        
+        if (this.retryCount < this.maxRetries) {
+          // Wait before retry, with exponential backoff
+          const delay = Math.pow(2, this.retryCount) * 1000;
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          
+          setTimeout(() => {
+            if (this.state.shouldBeCapturing && !this.state.isCapturing) {
+              this.ensureCapture();
+            }
+          }, delay);
+        } else {
+          // Max retries reached, revert UI
+          const checkbox = document.getElementById('eq-enabled');
+          if (checkbox) checkbox.checked = false;
+          this.updateEQUI(false);
+        }
       }
     }
   }
 
   // Stop capture
   async stopCapture() {
-    if (this.state.isCapturing) {
+    if (this.state.isCapturing || this.state.backgroundActive) {
       try {
         await this.components.captureManager.stop();
+        this.state.backgroundActive = false;
       } catch (error) {
         console.error('Failed to stop capture:', error);
       }
@@ -341,10 +368,10 @@ class AudioEqualizer {
 
   applyEQPreset(preset) {
     const presets = {
-      flat: [0, 0, 0, 0, 0],
-      bass: [6, 3, 0, -1, -2],
-      vocal: [-2, -1, 2, 4, 0],
-      treble: [-3, -1, 0, 2, 4]
+      flat: [0, 0, 0, 0, 0, 0, 0, 0],
+      bass: [8, 6, 4, 2, 0, -1, -2, -3],
+      vocal: [-2, -1, 0, 2, 4, 3, 1, -1],
+      treble: [-3, -2, -1, 0, 1, 3, 6, 8]
     };
     
     const values = presets[preset] || presets.flat;
@@ -362,6 +389,8 @@ class AudioEqualizer {
       btn.classList.remove('active');
     });
     document.querySelector(`[data-preset="${preset}"]`).classList.add('active');
+    
+    this.showNotification('Preset Applied', `${preset.charAt(0).toUpperCase() + preset.slice(1)} EQ preset applied`, 'success');
   }
 
   showNotification(title, message, type = 'info') {
@@ -382,12 +411,12 @@ class AudioEqualizer {
     
     container.appendChild(notification);
     
-    // Auto-remove after 5 seconds
+    // Auto-remove after 7 seconds (increased for longer messages)
     setTimeout(() => {
       if (notification.parentNode) {
         notification.remove();
       }
-    }, 5000);
+    }, 7000);
   }
 
   async loadSettings() {
@@ -398,12 +427,13 @@ class AudioEqualizer {
       // Set internal state
       this.state.shouldBeCapturing = settings.eqEnabled;
       
-      // Update EQ UI
-      this.updateEQUI(settings.eqEnabled);
+      // Update EQ UI based on settings or background state
+      const actualEnabled = settings.eqEnabled || this.state.backgroundActive;
+      this.updateEQUI(actualEnabled);
       
       // Set audio processor state if it exists
       if (this.components.audioProcessor) {
-        this.components.audioProcessor.eqEnabled = settings.eqEnabled;
+        this.components.audioProcessor.eqEnabled = actualEnabled;
         this.components.audioProcessor.eqValues = [...settings.eqBands];
       }
       
@@ -416,15 +446,29 @@ class AudioEqualizer {
         }
       });
       
-      // Auto-start capture if EQ is enabled
-      if (settings.eqEnabled) {
+      // Auto-start capture if EQ is enabled and not already active in background
+      if (settings.eqEnabled && !this.state.backgroundActive) {
+        console.log('🔄 Auto-starting EQ from saved settings...');
         setTimeout(() => this.ensureCapture(), 1000);
       }
       
-      console.log('⚙️ Settings loaded', settings);
+      console.log('⚙️ Settings loaded:', {
+        eqEnabled: settings.eqEnabled,
+        backgroundActive: this.state.backgroundActive,
+        eqBands: settings.eqBands
+      });
       
     } catch (error) {
       console.error('Error loading settings:', error);
+    }
+  }
+
+  // Cleanup when popup closes - register persistence
+  cleanup() {
+    if (this.state.isCapturing) {
+      console.log('🎛️ Popup closing - EQ will continue in background');
+      // Don't stop capture, let it continue in background
+      // The background script will track the state
     }
   }
 }
@@ -433,4 +477,11 @@ class AudioEqualizer {
 document.addEventListener('DOMContentLoaded', () => {
   window.audioEqualizer = new AudioEqualizer();
   window.audioEqualizer.init();
+});
+
+// Handle popup closing - maintain background persistence
+window.addEventListener('beforeunload', () => {
+  if (window.audioEqualizer) {
+    window.audioEqualizer.cleanup();
+  }
 });
