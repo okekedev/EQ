@@ -1,4 +1,4 @@
-// CaptureManager - Streamlined and Optimized
+// CaptureManager - Enhanced for Audio EQ Integration
 
 class CaptureManager {
   constructor(audioProcessor = null) {
@@ -18,12 +18,12 @@ class CaptureManager {
   }
 
   /**
-   * Start capturing audio from the specified tab with optional API interception
+   * Start capturing audio from the specified tab with API interception
    * @param {number} tabId - The ID of the tab to capture
    * @param {boolean} useAPIInterception - Whether to enable API interception
    * @returns {Promise<boolean>} - Whether capture was successful
    */
-  async start(tabId, useAPIInterception = false) {
+  async start(tabId, useAPIInterception = true) {
     try {
       // Stop any existing capture
       await this.stop();
@@ -40,26 +40,42 @@ class CaptureManager {
         throw new Error('Failed to capture tab audio - no stream returned');
       }
       
+      console.log('🎯 Tab audio captured successfully:', {
+        streamId: stream.id,
+        audioTracks: stream.getAudioTracks().length,
+        videoTracks: stream.getVideoTracks().length
+      });
+      
       // Store the stream
       this.activeStream = stream;
       
       // Create audio context if it doesn't exist
       if (!this.audioContext) {
         this.audioContext = new AudioContext();
+        console.log('🎯 Created new AudioContext:', this.audioContext.state);
+      }
+      
+      // Resume audio context if suspended
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+        console.log('🎯 AudioContext resumed');
       }
       
       // Initialize audio processor with the stream
       if (this.audioProcessor) {
+        console.log('🎯 Initializing audio processor...');
         await this.audioProcessor.initialize(stream, this.audioContext);
         
         // Enable API interception if requested
         if (useAPIInterception) {
           this.audioProcessor.startAPIInterception();
+          console.log('🎯 API interception started');
         }
         
         // Setup audio routing for passthrough
         this._setupAudioRouting();
       } else {
+        console.warn('⚠️ No audio processor provided - basic passthrough only');
         // If no processor, setup basic passthrough
         this.mediaStreamSource = this.audioContext.createMediaStreamSource(stream);
         this.audioDestination = this.audioContext.createMediaStreamDestination();
@@ -81,7 +97,7 @@ class CaptureManager {
         this.onStart();
       }
       
-      console.log('🎯 Capture started successfully');
+      console.log('✅ Capture started successfully');
       return true;
       
     } catch (error) {
@@ -116,11 +132,15 @@ class CaptureManager {
       if (this.audioProcessor) {
         this.audioProcessor.stopAPIInterception();
         await this.audioProcessor.cleanup();
+        console.log('🛑 Audio processor cleaned up');
       }
       
       // Stop the stream
       if (this.activeStream) {
-        this.activeStream.getTracks().forEach(track => track.stop());
+        this.activeStream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`🛑 Stopped track: ${track.kind}`);
+        });
         this.activeStream = null;
       }
       
@@ -169,6 +189,7 @@ class CaptureManager {
       this._updateAudioRouting();
     }
     
+    console.log(`🔊 Audio passthrough ${enabled ? 'enabled' : 'disabled'}`);
     return this;
   }
 
@@ -222,7 +243,14 @@ class CaptureManager {
         } else if (!stream) {
           reject(new Error('Failed to capture tab audio - no stream returned'));
         } else {
-          resolve(stream);
+          // Verify the stream has audio tracks
+          const audioTracks = stream.getAudioTracks();
+          if (audioTracks.length === 0) {
+            reject(new Error('Captured stream has no audio tracks'));
+          } else {
+            console.log(`🎯 Captured ${audioTracks.length} audio track(s)`);
+            resolve(stream);
+          }
         }
       });
     });
@@ -233,7 +261,10 @@ class CaptureManager {
    * @private
    */
   _setupAudioRouting() {
-    if (!this.audioProcessor) return;
+    if (!this.audioProcessor || !this.audioProcessor.outputNode) {
+      console.warn('⚠️ Cannot setup audio routing - no processor output node');
+      return;
+    }
     
     // Create destination for passthrough
     this.audioDestination = this.audioContext.createMediaStreamDestination();
@@ -241,10 +272,9 @@ class CaptureManager {
     // Connect processor output to destination if passthrough is enabled
     if (this.audioPassthrough) {
       const outputNode = this.audioProcessor.outputNode;
-      if (outputNode) {
-        outputNode.connect(this.audioDestination);
-        this._createAudioElement(this.audioDestination.stream);
-      }
+      outputNode.connect(this.audioDestination);
+      this._createAudioElement(this.audioDestination.stream);
+      console.log('🔊 Audio passthrough connected');
     }
   }
 
@@ -295,6 +325,7 @@ class CaptureManager {
     audioElement.style.display = 'none';
     
     document.body.appendChild(audioElement);
+    console.log('🔊 Audio passthrough element created');
   }
 
   /**
@@ -307,6 +338,7 @@ class CaptureManager {
       audioElement.pause();
       audioElement.srcObject = null;
       audioElement.remove();
+      console.log('🔊 Audio passthrough element removed');
     }
   }
 

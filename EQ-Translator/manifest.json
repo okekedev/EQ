@@ -1,16 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "EQ Translator",
+  "name": "Flip Phone",
   "version": "1.0.0",
-  "description": "Real-time audio translation with equalization and API interception magic",
+  "description": "Retro audio equalizer with that classic flip phone vibe 📱",
   "permissions": [
     "tabCapture",
     "storage",
-    "activeTab",
-    "scripting"
+    "activeTab"
   ],
   "host_permissions": [
-    "https://translation.googleapis.com/*",
     "http://*/*",
     "https://*/*"
   ],

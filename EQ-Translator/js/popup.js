@@ -1,12 +1,17 @@
-// EQ Translator - Simplified Controller
+// Audio Equalizer - Minimalist Single Section Design
 
-class EQTranslator {
+class AudioEqualizer {
   constructor() {
     this.components = {};
+    this.visualizer = {
+      canvas: null,
+      ctx: null,
+      animationId: null,
+      analyser: null
+    };
     this.state = {
-      isTranslating: false,
-      currentInput: '',
-      currentOutput: ''
+      isCapturing: false,
+      shouldBeCapturing: false
     };
   }
 
@@ -18,29 +23,15 @@ class EQTranslator {
       this.components.storage = new Storage();
       this.components.audioProcessor = new AudioProcessor();
       this.components.captureManager = new CaptureManager();
-      this.components.speechRecognizer = new SpeechRecognizer(this.components.audioProcessor);
-      this.components.translator = new Translator();
-      this.components.speechSynthesizer = new SpeechSynthesizer();
       
-      // Visualizer removed - no longer needed
-      
-      // Initialize speech recognizer
-      try {
-        this.components.speechRecognizer.init();
-      } catch (error) {
-        console.warn('Speech recognition not available:', error.message);
-      }
-      
-      // Initialize other components
+      // Initialize components
       await this.components.storage.init();
-      await this.components.translator.init();
-      await this.components.speechSynthesizer.init();
       
       // Setup everything
       this.setupEventListeners();
       this.setupCallbacks();
+      this.setupVisualizer();
       await this.loadSettings();
-      this.populateVoices();
       
       this.updateStatus('Ready', 'active');
       
@@ -52,51 +43,13 @@ class EQTranslator {
   }
 
   setupEventListeners() {
-    // Main translation button - updated selector
-    const toggleBtn = document.getElementById('toggle-translation');
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => this.toggleTranslation());
+    // EQ Power Switch - This now controls everything
+    const eqToggle = document.getElementById('eq-enabled');
+    if (eqToggle) {
+      eqToggle.addEventListener('change', (e) => this.toggleEQPower(e.target.checked));
     }
     
-    // Language selectors
-    const sourceLang = document.getElementById('source-language');
-    if (sourceLang) {
-      sourceLang.addEventListener('change', (e) => {
-        this.updateLanguageDisplay();
-        if (this.components.speechRecognizer) {
-          this.components.speechRecognizer.setLanguage(e.target.value);
-        }
-      });
-    }
-    
-    const targetLang = document.getElementById('target-language');
-    if (targetLang) {
-      targetLang.addEventListener('change', (e) => {
-        this.updateLanguageDisplay();
-        if (this.components.translator) {
-          this.components.translator.setTargetLanguage(e.target.value);
-        }
-        this.populateVoices();
-      });
-    }
-    
-    // Copy button
-    const copyBtn = document.getElementById('copy-output');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => this.copyOutput());
-    }
-    
-    // Settings toggles
-    document.querySelectorAll('.section-header').forEach(header => {
-      header.addEventListener('click', () => {
-        const section = header.dataset.section;
-        if (section) {
-          this.toggleSection(section);
-        }
-      });
-    });
-    
-    // EQ controls - updated for 5 bands
+    // EQ controls
     document.querySelectorAll('.eq-band input').forEach((slider, index) => {
       slider.addEventListener('input', (e) => this.updateEQBand(index, e.target.value));
     });
@@ -104,172 +57,262 @@ class EQTranslator {
     document.querySelectorAll('.presets button').forEach(btn => {
       btn.addEventListener('click', () => this.applyEQPreset(btn.dataset.preset));
     });
-    
-    // Speech controls
-    const speechRate = document.getElementById('speech-rate');
-    if (speechRate) {
-      speechRate.addEventListener('input', (e) => {
-        const rateValue = document.getElementById('rate-value');
-        if (rateValue) rateValue.textContent = e.target.value;
-        if (this.components.speechSynthesizer) {
-          this.components.speechSynthesizer.setRate(parseFloat(e.target.value));
-        }
-      });
-    }
-    
-    const speechVolume = document.getElementById('speech-volume');
-    if (speechVolume) {
-      speechVolume.addEventListener('input', (e) => {
-        const volumeValue = document.getElementById('volume-value');
-        if (volumeValue) volumeValue.textContent = e.target.value;
-        if (this.components.speechSynthesizer) {
-          this.components.speechSynthesizer.setVolume(parseFloat(e.target.value));
-        }
-      });
-    }
   }
 
   setupCallbacks() {
     // Capture manager callbacks
     if (this.components.captureManager) {
-      this.components.captureManager.onCaptureStarted = () => {
-        this.updateInputStatus('🎯 Magic Active');
-        // Visualizer removed - no longer needed
+      this.components.captureManager.onStart = () => {
+        this.state.isCapturing = true;
+        this.updateStatus('🎛️ EQ Active', 'active');
+        
+        // Initialize audio processor with the captured stream
+        if (this.components.captureManager.getActiveStream()) {
+          this.components.audioProcessor.initialize(
+            this.components.captureManager.getActiveStream(),
+            this.components.captureManager.getAudioContext()
+          ).then(() => {
+            console.log('🎯 Audio processor initialized with captured stream');
+            this.startVisualizer();
+          }).catch(error => {
+            console.error('Failed to initialize audio processor:', error);
+          });
+        }
       };
       
-      this.components.captureManager.onCaptureStopped = () => {
-        this.updateInputStatus('Ready');
-        // Visualizer removed - no longer needed
+      this.components.captureManager.onStop = () => {
+        this.state.isCapturing = false;
+        this.stopVisualizer();
+        // Auto-restart if EQ should be active
+        if (this.state.shouldBeCapturing) {
+          setTimeout(() => this.ensureCapture(), 1000);
+        } else {
+          this.updateStatus('Ready', 'active');
+        }
       };
       
-      this.components.captureManager.onCaptureError = (error) => {
+      this.components.captureManager.onError = (error) => {
         this.showNotification('Capture Error', error.message, 'error');
+        this.updateStatus('Error', 'error');
+        this.stopVisualizer();
+        // Try to restart if EQ should be active
+        if (this.state.shouldBeCapturing) {
+          setTimeout(() => this.ensureCapture(), 2000);
+        }
       };
     }
+  }
+
+  // Visualizer Methods
+  setupVisualizer() {
+    this.visualizer.canvas = document.getElementById('visualizer-canvas');
+    if (this.visualizer.canvas) {
+      this.visualizer.ctx = this.visualizer.canvas.getContext('2d');
+      
+      // Set canvas size
+      const rect = this.visualizer.canvas.getBoundingClientRect();
+      this.visualizer.canvas.width = rect.width * 2; // High DPI
+      this.visualizer.canvas.height = rect.height * 2;
+      this.visualizer.ctx.scale(2, 2);
+      
+      // Start with empty visualization
+      this.drawEmptyVisualizer();
+    }
+  }
+
+  startVisualizer() {
+    if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
+      this.visualizer.analyser = this.components.audioProcessor.getAnalyser();
+      if (this.visualizer.analyser) {
+        this.visualizer.analyser.fftSize = 256;
+        this.animateVisualizer();
+      }
+    }
+  }
+
+  stopVisualizer() {
+    if (this.visualizer.animationId) {
+      cancelAnimationFrame(this.visualizer.animationId);
+      this.visualizer.animationId = null;
+    }
+    this.drawEmptyVisualizer();
+  }
+
+  animateVisualizer() {
+    if (!this.visualizer.analyser || !this.visualizer.ctx) return;
     
-    // Speech recognition callbacks
-    if (this.components.speechRecognizer) {
-      this.components.speechRecognizer.onResult = (result) => {
-        this.updateInput(result.transcript, result.isFinal);
+    const bufferLength = this.visualizer.analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    const draw = () => {
+      this.visualizer.animationId = requestAnimationFrame(draw);
+      
+      this.visualizer.analyser.getByteFrequencyData(dataArray);
+      
+      const ctx = this.visualizer.ctx;
+      const canvas = this.visualizer.canvas;
+      const width = canvas.width / 2;
+      const height = canvas.height / 2;
+      
+      // Clear canvas
+      ctx.fillStyle = 'linear-gradient(45deg, #000, #1a1a1a)';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Draw frequency bars
+      const barWidth = width / bufferLength * 2.5;
+      let x = 0;
+      
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (dataArray[i] / 255) * height * 0.8;
         
-        if (result.isFinal) {
-          this.state.currentInput = result.transcript;
+        // Create gradient for each bar
+        const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+        gradient.addColorStop(0, '#00ff88');
+        gradient.addColorStop(0.6, '#0088ff');
+        gradient.addColorStop(1, '#ff0088');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+        
+        x += barWidth;
+      }
+    };
+    
+    draw();
+  }
+
+  drawEmptyVisualizer() {
+    if (!this.visualizer.ctx) return;
+    
+    const ctx = this.visualizer.ctx;
+    const canvas = this.visualizer.canvas;
+    const width = canvas.width / 2;
+    const height = canvas.height / 2;
+    
+    // Clear with dark gradient
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#000');
+    gradient.addColorStop(1, '#1a1a1a');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw placeholder text
+    ctx.fillStyle = '#444';
+    ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Audio visualization will appear here', width / 2, height / 2);
+  }
+
+  // EQ Power Switch Methods - Now controls everything
+  async toggleEQPower(enabled) {
+    try {
+      // Save state
+      this.state.shouldBeCapturing = enabled;
+      await this.components.storage.save('eqEnabled', enabled);
+      
+      // Update audio processor state
+      if (this.components.audioProcessor) {
+        if (this.components.audioProcessor.isInitialized) {
+          await this.components.audioProcessor.toggleEQ(enabled);
+        } else {
+          this.components.audioProcessor.eqEnabled = enabled;
+        }
+      }
+      
+      // Update UI
+      this.updateEQUI(enabled);
+      
+      // Start or stop capture based on EQ state
+      if (enabled) {
+        await this.ensureCapture();
+        this.showNotification('EQ Enabled', 'Audio processing started automatically', 'success');
+      } else {
+        await this.stopCapture();
+        this.showNotification('EQ Disabled', 'Audio processing stopped', 'info');
+      }
+      
+      console.log(`🎛️ EQ ${enabled ? 'enabled' : 'disabled'}`);
+      
+    } catch (error) {
+      console.error('Error toggling EQ:', error);
+      this.showNotification('EQ Error', 'Failed to toggle equalizer', 'error');
+      
+      // Revert UI on error
+      const checkbox = document.getElementById('eq-enabled');
+      if (checkbox) checkbox.checked = !enabled;
+    }
+  }
+
+  // Ensure capture is active when needed
+  async ensureCapture() {
+    if (this.state.shouldBeCapturing && !this.state.isCapturing) {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length > 0) {
+          // Pass the audio processor to capture manager so it can initialize it
+          await this.components.captureManager.start(tabs[0].id, true);
           
-          // Auto-translate if enabled
-          const autoTranslate = document.getElementById('auto-translate');
-          if (autoTranslate && autoTranslate.checked) {
-            this.translate();
+          // Verify we have audio context and stream
+          const stream = this.components.captureManager.getActiveStream();
+          const audioContext = this.components.captureManager.getAudioContext();
+          
+          if (stream && audioContext) {
+            console.log('🎯 Audio capture successful:', {
+              streamTracks: stream.getAudioTracks().length,
+              audioContextState: audioContext.state
+            });
+          } else {
+            console.warn('⚠️ Audio capture incomplete - missing stream or context');
           }
         }
-      };
-      
-      this.components.speechRecognizer.onError = (error) => {
-        this.showNotification('Recognition Error', error.message, 'error');
-      };
-    }
-    
-    // Translation callbacks
-    if (this.components.translator) {
-      this.components.translator.onResult = (result) => {
-        this.state.currentOutput = result.translatedText;
-        this.updateOutput(result.translatedText);
-        
-        // Auto-speak if enabled
-        const autoSpeak = document.getElementById('auto-speak');
-        if (autoSpeak && autoSpeak.checked) {
-          this.speak();
-        }
-      };
-      
-      this.components.translator.onError = (error) => {
-        this.showNotification('Translation Error', error.message, 'error');
-      };
-    }
-  }
-
-  async toggleTranslation() {
-    if (this.state.isTranslating) {
-      await this.stopTranslation();
-    } else {
-      await this.startTranslation();
-    }
-  }
-
-  async startTranslation() {
-    try {
-      this.updateStatus('Starting translation...', 'pending');
-      
-      // Get current tab and start capture
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tabs.length) throw new Error('No active tab found');
-      
-      // Initialize capture manager with audio processor
-      this.components.captureManager.initialize(this.components.audioProcessor);
-      
-      // Start capture with API interception
-      await this.components.captureManager.startCapture(tabs[0].id);
-      this.components.audioProcessor.startAPIInterception();
-      
-      // Start speech recognition
-      const language = document.getElementById('source-language').value;
-      await this.components.speechRecognizer.start(language);
-      
-      // Update UI
-      this.state.isTranslating = true;
-      this.updateTranslationButton();
-      this.updateStatus('🎯 Translation Active', 'active');
-      
-    } catch (error) {
-      console.error('Translation start error:', error);
-      this.updateStatus('Failed to start', 'error');
-      this.showNotification('Error', error.message, 'error');
-    }
-  }
-
-  async stopTranslation() {
-    try {
-      this.updateStatus('Stopping translation...', 'pending');
-      
-      // Stop speech recognition
-      if (this.components.speechRecognizer) {
-        this.components.speechRecognizer.stop();
+      } catch (error) {
+        console.error('Failed to ensure capture:', error);
+        this.showNotification('Capture Failed', error.message, 'error');
       }
-      
-      // Stop API interception
-      if (this.components.audioProcessor.isAPIIntercepting()) {
-        this.components.audioProcessor.stopAPIInterception();
-      }
-      
-      // Stop capture
-      await this.components.captureManager.stopCapture();
-      
-      // Update UI
-      this.state.isTranslating = false;
-      this.updateTranslationButton();
-      this.updateStatus('Ready', 'active');
-      
-    } catch (error) {
-      console.error('Translation stop error:', error);
-      this.showNotification('Error', error.message, 'error');
     }
   }
 
-  async translate() {
-    if (!this.state.currentInput) return;
-    
-    const sourceLang = document.getElementById('source-language').value.split('-')[0];
-    const targetLang = document.getElementById('target-language').value;
-    
-    await this.components.translator.translate(this.state.currentInput, sourceLang, targetLang);
+  // Stop capture
+  async stopCapture() {
+    if (this.state.isCapturing) {
+      try {
+        await this.components.captureManager.stop();
+      } catch (error) {
+        console.error('Failed to stop capture:', error);
+      }
+    }
   }
 
-  async speak() {
-    if (!this.state.currentOutput) return;
+  updateEQUI(enabled) {
+    const checkbox = document.getElementById('eq-enabled');
+    const powerSection = document.querySelector('.eq-power-section');
+    const status = document.getElementById('eq-status');
+    const container = document.querySelector('.eq-container');
     
-    const voiceSelect = document.getElementById('voice-select');
-    const voiceIndex = voiceSelect ? parseInt(voiceSelect.value) : 0;
+    // Force update checkbox state
+    if (checkbox && checkbox.checked !== enabled) {
+      checkbox.checked = enabled;
+    }
     
-    await this.components.speechSynthesizer.speak(this.state.currentOutput, voiceIndex);
+    if (powerSection) {
+      powerSection.classList.toggle('active', enabled);
+    }
+    
+    if (status) {
+      status.textContent = enabled ? 'ON' : 'OFF';
+      status.classList.toggle('active', enabled);
+    }
+    
+    if (container) {
+      container.classList.toggle('disabled', !enabled);
+    }
+    
+    // Update EQ sliders visual state
+    const sliders = document.querySelectorAll('.eq-slider');
+    sliders.forEach(slider => {
+      slider.style.opacity = enabled ? '1' : '0.5';
+    });
   }
 
   // UI Update Methods
@@ -281,87 +324,7 @@ class EQTranslator {
     if (statusIcon) statusIcon.className = `status-icon ${type}`;
   }
 
-  updateTranslationButton() {
-    const button = document.getElementById('toggle-translation');
-    if (button) {
-      button.textContent = this.state.isTranslating ? '🛑 Stop Translation' : '🎯 Start Translation';
-    }
-  }
-
-  updateLanguageDisplay() {
-    const sourceLang = document.getElementById('source-language');
-    const targetLang = document.getElementById('target-language');
-    const sourceDisplay = document.getElementById('source-lang-display');
-    const targetDisplay = document.getElementById('target-lang-display');
-    
-    if (sourceLang && sourceDisplay) {
-      sourceDisplay.textContent = sourceLang.options[sourceLang.selectedIndex].text;
-    }
-    
-    if (targetLang && targetDisplay) {
-      targetDisplay.textContent = targetLang.options[targetLang.selectedIndex].text;
-    }
-  }
-
-  updateInputStatus(status) {
-    const inputSource = document.getElementById('input-source');
-    if (inputSource) {
-      inputSource.textContent = status;
-      inputSource.className = status === '🎯 Magic Active' ? 'badge magic' : 'badge';
-    }
-  }
-
-  updateInput(text, isFinal) {
-    const inputContent = document.getElementById('input-content');
-    if (inputContent) {
-      if (isFinal) {
-        inputContent.innerHTML += `<p>${text}</p>`;
-      } else {
-        // Update interim result
-        let interim = inputContent.querySelector('.interim');
-        if (!interim) {
-          interim = document.createElement('p');
-          interim.className = 'interim';
-          interim.style.opacity = '0.7';
-          inputContent.appendChild(interim);
-        }
-        interim.textContent = text;
-      }
-      inputContent.scrollTop = inputContent.scrollHeight;
-    }
-  }
-
-  updateOutput(text) {
-    const outputContent = document.getElementById('output-content');
-    if (outputContent) {
-      outputContent.innerHTML = `<p>${text}</p>`;
-      outputContent.scrollTop = outputContent.scrollHeight;
-    }
-  }
-
-  async copyOutput() {
-    if (!this.state.currentOutput) return;
-    
-    try {
-      await navigator.clipboard.writeText(this.state.currentOutput);
-      this.showNotification('Copied', 'Translation copied to clipboard', 'success');
-    } catch (error) {
-      this.showNotification('Copy Failed', 'Could not copy to clipboard', 'error');
-    }
-  }
-
-  toggleSection(sectionName) {
-    const content = document.getElementById(`${sectionName}-content`);
-    const button = document.querySelector(`[data-section="${sectionName}"] .toggle-btn`);
-    
-    if (content && button) {
-      const isCollapsed = content.classList.contains('collapsed');
-      content.classList.toggle('collapsed');
-      button.classList.toggle('collapsed', !isCollapsed);
-    }
-  }
-
-  // EQ Methods - Updated for 5 bands
+  // EQ Methods
   updateEQBand(index, value) {
     const band = document.querySelectorAll('.eq-band')[index];
     const valueDisplay = band.querySelector('.eq-value');
@@ -370,17 +333,18 @@ class EQTranslator {
       valueDisplay.textContent = `${value}dB`;
     }
     
-    if (this.state.isTranslating && this.components.audioProcessor) {
+    // Update audio processor if active
+    if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
       this.components.audioProcessor.updateEQBand(index, parseFloat(value));
     }
   }
 
   applyEQPreset(preset) {
     const presets = {
-      flat: [0, 0, 0, 0, 0],      // 5 bands instead of 6
-      bass: [6, 3, 0, -1, -2],    // 5 bands instead of 6
-      vocal: [-2, -1, 2, 4, 0],   // 5 bands instead of 6
-      treble: [-3, -1, 0, 2, 4]   // 5 bands instead of 6
+      flat: [0, 0, 0, 0, 0],
+      bass: [6, 3, 0, -1, -2],
+      vocal: [-2, -1, 2, 4, 0],
+      treble: [-3, -1, 0, 2, 4]
     };
     
     const values = presets[preset] || presets.flat;
@@ -392,27 +356,12 @@ class EQTranslator {
         this.updateEQBand(index, values[index]);
       }
     });
-  }
-
-  populateVoices() {
-    const select = document.getElementById('voice-select');
-    if (!select || !this.components.speechSynthesizer) return;
     
-    const voices = this.components.speechSynthesizer.getVoices();
-    const targetLang = document.getElementById('target-language').value;
-    
-    select.innerHTML = '';
-    voices.forEach((voice, index) => {
-      const option = document.createElement('option');
-      option.value = index;
-      option.textContent = `${voice.name} (${voice.lang})`;
-      
-      if (voice.lang.startsWith(targetLang)) {
-        option.selected = true;
-      }
-      
-      select.appendChild(option);
+    // Highlight active preset
+    document.querySelectorAll('.presets .btn').forEach(btn => {
+      btn.classList.remove('active');
     });
+    document.querySelector(`[data-preset="${preset}"]`).classList.add('active');
   }
 
   showNotification(title, message, type = 'info') {
@@ -442,13 +391,46 @@ class EQTranslator {
   }
 
   async loadSettings() {
-    // Load basic settings
-    this.updateLanguageDisplay();
+    try {
+      // Load all settings
+      const settings = await this.components.storage.getCurrentSettings();
+      
+      // Set internal state
+      this.state.shouldBeCapturing = settings.eqEnabled;
+      
+      // Update EQ UI
+      this.updateEQUI(settings.eqEnabled);
+      
+      // Set audio processor state if it exists
+      if (this.components.audioProcessor) {
+        this.components.audioProcessor.eqEnabled = settings.eqEnabled;
+        this.components.audioProcessor.eqValues = [...settings.eqBands];
+      }
+      
+      // Set EQ band values in UI
+      const sliders = document.querySelectorAll('.eq-band input');
+      sliders.forEach((slider, index) => {
+        if (settings.eqBands[index] !== undefined) {
+          slider.value = settings.eqBands[index];
+          this.updateEQBand(index, settings.eqBands[index]);
+        }
+      });
+      
+      // Auto-start capture if EQ is enabled
+      if (settings.eqEnabled) {
+        setTimeout(() => this.ensureCapture(), 1000);
+      }
+      
+      console.log('⚙️ Settings loaded', settings);
+      
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
   }
 }
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  window.eqTranslator = new EQTranslator();
-  window.eqTranslator.init();
+  window.audioEqualizer = new AudioEqualizer();
+  window.audioEqualizer.init();
 });

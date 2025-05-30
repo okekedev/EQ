@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>EQ Translator</title>
+  <title>Audio Equalizer</title>
   <link rel="stylesheet" href="css/popup.css">
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>🎯 EQ Translator</h1>
+      <h1>🎛️ Audio Equalizer</h1>
       <div class="status">
         <span id="status-text">Ready</span>
         <span id="status-icon" class="status-icon"></span>
@@ -16,145 +16,61 @@
     </header>
 
     <main>
-      <!-- Main Translation Section (Now Collapsible) -->
-      <section class="section">
-        <div class="section-header" data-section="translation">
-          <h2>🌐 Translation</h2>
-          <button class="toggle-btn collapsed">▼</button>
+      <!-- Single EQ Section -->
+      <div class="eq-container">
+        <!-- EQ Enable/Disable Switch -->
+        <div class="eq-power-section">
+          <label class="eq-power-switch">
+            <input type="checkbox" id="eq-enabled" checked>
+            <span class="eq-switch-slider"></span>
+          </label>
+          <span class="eq-power-label">Equalizer</span>
+          <span id="eq-status" class="eq-status active">ON</span>
         </div>
-        <div class="section-content collapsed" id="translation-content">
-          <div class="translation-controls">
-            <div class="language-row">
-              <select id="source-language" class="language-dropdown">
-                <option value="en-US">English (US)</option>
-                <option value="es-ES">Spanish</option>
-                <option value="fr-FR">French</option>
-                <option value="de-DE">German</option>
-                <option value="it-IT">Italian</option>
-                <option value="ja-JP">Japanese</option>
-                <option value="ko-KR">Korean</option>
-                <option value="zh-CN">Chinese</option>
-              </select>
-              
-              <span class="language-separator">to</span>
-              
-              <select id="target-language" class="language-dropdown">
-                <option value="en">English</option>
-                <option value="es" selected>Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="it">Italian</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-                <option value="zh">Chinese</option>
-              </select>
-            </div>
-            
-            <div class="button-row">
-              <button id="toggle-translation" class="start-button">🎯 Start</button>
-            </div>
-          </div>
 
-          <div class="translation-boxes">
-            <div class="input-box">
-              <div class="box-header">
-                <h3>Input (<span id="source-lang-display">English</span>)</h3>
-                <span id="input-source" class="badge">Ready</span>
-              </div>
-              <div id="input-content" class="content">Click "Start Translation" to begin listening...</div>
-            </div>
+        <!-- Audio Visualizer -->
+        <div class="eq-visualizer">
+          <canvas id="visualizer-canvas" width="350" height="120"></canvas>
+          <div class="visualizer-info">Real-time audio visualization</div>
+        </div>
+        
+        <!-- EQ Controls -->
+        <div class="eq-sliders">
+          <div class="eq-band" data-freq="100">
+            <input type="range" min="-12" max="12" value="0" class="eq-slider">
+            <span class="eq-label">100Hz</span>
+            <span class="eq-value">0dB</span>
+          </div>
+          <div class="eq-band" data-freq="250">
+            <input type="range" min="-12" max="12" value="0" class="eq-slider">
+            <span class="eq-label">250Hz</span>
+            <span class="eq-value">0dB</span>
+          </div>
+          <div class="eq-band" data-freq="500">
+            <input type="range" min="-12" max="12" value="0" class="eq-slider">
+            <span class="eq-label">500Hz</span>
+            <span class="eq-value">0dB</span>
+          </div>
+          <div class="eq-band" data-freq="1000">
+            <input type="range" min="-12" max="12" value="0" class="eq-slider">
+            <span class="eq-label">1kHz</span>
+            <span class="eq-value">0dB</span>
+          </div>
+          <div class="eq-band" data-freq="4000">
+            <input type="range" min="-12" max="12" value="0" class="eq-slider">
+            <span class="eq-label">4kHz</span>
+            <span class="eq-value">0dB</span>
+          </div>
+        </div>
 
-            <div class="output-box">
-              <div class="box-header">
-                <h3>Output (<span id="target-lang-display">Spanish</span>)</h3>
-                <button id="copy-output" class="btn small">Copy</button>
-              </div>
-              <div id="output-content" class="content">Translation will appear here...</div>
-            </div>
-          </div>
+        <!-- EQ Presets -->
+        <div class="presets">
+          <button class="btn small" data-preset="flat">Flat</button>
+          <button class="btn small" data-preset="bass">Bass</button>
+          <button class="btn small" data-preset="vocal">Vocal</button>
+          <button class="btn small" data-preset="treble">Treble</button>
         </div>
-      </section>
-
-      <!-- Equalizer Section (Collapsed) -->
-      <section class="section">
-        <div class="section-header" data-section="equalizer">
-          <h2>🎛️ Equalizer</h2>
-          <button class="toggle-btn collapsed">▼</button>
-        </div>
-        <div class="section-content collapsed" id="equalizer-content">
-          <div class="eq-container">
-            <div class="eq-sliders">
-              <div class="eq-band" data-freq="100">
-                <input type="range" min="-12" max="12" value="0" class="eq-slider">
-                <span class="eq-label">100Hz</span>
-                <span class="eq-value">0dB</span>
-              </div>
-              <div class="eq-band" data-freq="250">
-                <input type="range" min="-12" max="12" value="0" class="eq-slider">
-                <span class="eq-label">250Hz</span>
-                <span class="eq-value">0dB</span>
-              </div>
-              <div class="eq-band" data-freq="500">
-                <input type="range" min="-12" max="12" value="0" class="eq-slider">
-                <span class="eq-label">500Hz</span>
-                <span class="eq-value">0dB</span>
-              </div>
-              <div class="eq-band" data-freq="1000">
-                <input type="range" min="-12" max="12" value="0" class="eq-slider">
-                <span class="eq-label">1kHz</span>
-                <span class="eq-value">0dB</span>
-              </div>
-              <div class="eq-band" data-freq="4000">
-                <input type="range" min="-12" max="12" value="0" class="eq-slider">
-                <span class="eq-label">4kHz</span>
-                <span class="eq-value">0dB</span>
-              </div>
-            </div>
-            <div class="presets">
-              <button class="btn small" data-preset="flat">Flat</button>
-              <button class="btn small" data-preset="bass">Bass</button>
-              <button class="btn small" data-preset="vocal">Vocal</button>
-              <button class="btn small" data-preset="treble">Treble</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Settings Section (Collapsed) -->
-      <section class="section">
-        <div class="section-header" data-section="settings">
-          <h2>⚙️ Settings</h2>
-          <button class="toggle-btn collapsed">▼</button>
-        </div>
-        <div class="section-content collapsed" id="settings-content">
-          <div class="settings-group">
-            <label class="checkbox">
-              <input type="checkbox" id="auto-translate" checked>
-              Auto-translate speech
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" id="auto-speak" checked>
-              Auto-speak translation
-            </label>
-          </div>
-          
-          <div class="voice-controls">
-            <label>Voice:</label>
-            <select id="voice-select"></select>
-          </div>
-          
-          <div class="speech-controls">
-            <div class="slider-group">
-              <label>Speed: <span id="rate-value">1.0</span></label>
-              <input type="range" min="0.5" max="2" step="0.1" value="1" id="speech-rate">
-            </div>
-            <div class="slider-group">
-              <label>Volume: <span id="volume-value">1.0</span></label>
-              <input type="range" min="0" max="1" step="0.1" value="1" id="speech-volume">
-            </div>
-          </div>
-        </div>
-      </section>
+      </div>
     </main>
   </div>
 
@@ -162,13 +78,9 @@
   <div id="notifications"></div>
 
   <!-- Scripts -->
-  <script src="js/config/config.js"></script>
   <script src="js/core/storage.js"></script>
   <script src="js/core/audio-processor.js"></script>
   <script src="js/core/capture-manager.js"></script>
-  <script src="js/core/speech-recognizer.js"></script>
-  <script src="js/core/translator.js"></script>
-  <script src="js/core/speech-synthesizer.js"></script>
   <script src="js/popup.js"></script>
 </body>
 </html>
