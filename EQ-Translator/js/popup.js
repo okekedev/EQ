@@ -1,323 +1,331 @@
-// Audio Equalizer - Enhanced with Background Persistence
+// EQ-Translator/js/popup.js
+// Clean Global-Only Audio Equalizer - NO LEGACY FALLBACK
 
-class AudioEqualizer {
+class GlobalOnlyAudioEqualizer {
   constructor() {
     this.components = {};
     this.visualizer = null;
     this.state = {
-      isCapturing: false,
-      shouldBeCapturing: false,
-      backgroundActive: false
+      globalEQActive: false,
+      currentTabId: null
     };
-    this.retryCount = 0;
-    this.maxRetries = 3;
+    this.globalStatusInterval = null;
   }
 
   async init() {
     try {
+      console.log('🌍 GLOBAL POPUP: Initializing global-only equalizer...');
       this.updateStatus('Initializing...', 'pending');
       
-      // Initialize components
+      // Initialize minimal components needed
       this.components.storage = new Storage();
-      this.components.audioProcessor = new AudioProcessor();
-      this.components.captureManager = new CaptureManager();
-      
-      // Initialize capture manager with audio processor
-      this.components.captureManager.initialize(this.components.audioProcessor);
-      
       this.visualizer = new AudioVisualizer('visualizer-canvas');
       
       // Initialize storage
       await this.components.storage.init();
       
-      // Setup everything
+      // Get current tab info
+      await this.getCurrentTabInfo();
+      
+      // Setup event listeners
       this.setupEventListeners();
-      this.setupCallbacks();
       
-      // Check background state first - IMPORTANT for persistence
-      await this.checkBackgroundState();
+      // Check global EQ state
+      await this.checkGlobalEQState();
       
-      // Load settings and apply them
+      // Load settings
       await this.loadSettings();
       
+      // Start monitoring
+      this.startGlobalStatusMonitoring();
+      
       this.updateStatus('Ready', 'active');
+      console.log('✅ GLOBAL POPUP: Initialization complete');
       
     } catch (error) {
-      console.error('Initialization error:', error);
+      console.error('❌ GLOBAL POPUP: Initialization error:', error);
       this.updateStatus('Initialization failed', 'error');
       this.showNotification('Error', error.message, 'error');
     }
   }
 
-  // Check background EQ state for persistence
-  async checkBackgroundState() {
+  async getCurrentTabInfo() {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'getEQState' });
-      if (response && response.isActive) {
-        console.log('🎛️ EQ is already active in background on tab:', response.activeTabId);
-        this.state.backgroundActive = true;
-        this.state.isCapturing = true; // UI state
-        this.updateStatus('🎛️ EQ Active (Background)', 'active');
-        
-        // Show notification about background state
-        this.showNotification(
-          'EQ Active', 
-          'EQ is running in background. Toggle off/on to restart audio processing.', 
-          'info'
-        );
-        
-        // Update badge to show EQ is active
-        chrome.runtime.sendMessage({ 
-          action: 'captureStarted', 
-          tabId: response.activeTabId 
-        });
-      } else {
-        this.state.backgroundActive = false;
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length > 0) {
+        this.state.currentTabId = tabs[0].id;
+        console.log('📍 GLOBAL POPUP: Current tab ID:', this.state.currentTabId);
       }
     } catch (error) {
-      console.log('Could not check background state:', error);
-      this.state.backgroundActive = false;
+      console.error('❌ GLOBAL POPUP: Error getting current tab:', error);
+    }
+  }
+
+  async checkGlobalEQState() {
+    try {
+      console.log('🔍 GLOBAL POPUP: Checking global EQ state...');
+      
+      const response = await chrome.runtime.sendMessage({ action: 'getGlobalEQState' });
+      console.log('🔍 GLOBAL POPUP: Background response:', response);
+      
+      if (response?.isActive) {
+        console.log('🌍 GLOBAL POPUP: Global EQ is already active');
+        this.state.globalEQActive = true;
+        this.updateGlobalEQUI(true);
+        this.updateStatus('🌍 Global EQ Active', 'active');
+        
+        this.showNotification(
+          'Global EQ Active',
+          `EQ is running on ${response.activeTabs?.length || 'all'} tabs`,
+          'success'
+        );
+      } else {
+        console.log('🔍 GLOBAL POPUP: Global EQ is not active');
+        this.state.globalEQActive = false;
+        this.updateGlobalEQUI(false);
+      }
+      
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Error checking global EQ state:', error);
     }
   }
 
   setupEventListeners() {
-    // EQ Power Switch - Now controls everything with background persistence
+    console.log('🔧 GLOBAL POPUP: Setting up event listeners...');
+    
+    // EQ Power Switch - GLOBAL ONLY
     const eqToggle = document.getElementById('eq-enabled');
     if (eqToggle) {
-      eqToggle.addEventListener('change', (e) => this.toggleEQPower(e.target.checked));
+      console.log('✅ GLOBAL POPUP: Found EQ toggle');
+      eqToggle.addEventListener('change', (e) => this.toggleGlobalEQ(e.target.checked));
+    } else {
+      console.error('❌ GLOBAL POPUP: EQ toggle not found!');
     }
     
-    // EQ controls
-    document.querySelectorAll('.eq-band input').forEach((slider, index) => {
+    // EQ band controls
+    const eqBands = document.querySelectorAll('.eq-band input');
+    console.log('🔧 GLOBAL POPUP: Found', eqBands.length, 'EQ band sliders');
+    eqBands.forEach((slider, index) => {
       slider.addEventListener('input', (e) => this.updateEQBand(index, e.target.value));
     });
     
-    document.querySelectorAll('.presets button').forEach(btn => {
+    // Preset buttons
+    const presetButtons = document.querySelectorAll('.presets button');
+    console.log('🔧 GLOBAL POPUP: Found', presetButtons.length, 'preset buttons');
+    presetButtons.forEach(btn => {
       btn.addEventListener('click', () => this.applyEQPreset(btn.dataset.preset));
     });
   }
 
-  setupCallbacks() {
-    // Capture manager callbacks
-    if (this.components.captureManager) {
-      this.components.captureManager.onStart = () => {
-        this.state.isCapturing = true;
-        this.state.backgroundActive = true;
-        this.updateStatus('🎛️ EQ Active', 'active');
-        
-        // Start visualizer if audio processor is ready
-        if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
-          console.log('🎯 Audio processor ready, starting visualizer');
-          this.startVisualizer();
-        }
-        
-        // Show persistence info
-        this.showNotification(
-          'EQ Started', 
-          'EQ is now active. You can close this popup and EQ will continue running.', 
-          'success'
-        );
-      };
-      
-      this.components.captureManager.onStop = () => {
-        this.state.isCapturing = false;
-        this.state.backgroundActive = false;
-        this.stopVisualizer();
-        this.updateStatus('Ready', 'active');
-        
-        // Notify background that EQ stopped
-        chrome.runtime.sendMessage({ action: 'captureStopped' });
-      };
-      
-      this.components.captureManager.onError = (error) => {
-        console.error('Capture manager error:', error);
-        
-        // Provide helpful error messages based on error type
-        let userMessage = error.message;
-        if (error.message.includes('Invalid state')) {
-          userMessage = 'Tab must be playing audio to start EQ. Try starting music/video first.';
-        } else if (error.message.includes('Extension has not been invoked')) {
-          userMessage = 'Please click the extension icon again to activate EQ.';
-        }
-        
-        this.showNotification('Capture Error', userMessage, 'error');
-        this.updateStatus('Error', 'error');
-        this.stopVisualizer();
-        this.state.isCapturing = false;
-        this.state.backgroundActive = false;
-      };
-    }
-  }
-
-  // Visualizer Methods
-  startVisualizer() {
-    if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
-      const analyser = this.components.audioProcessor.getAnalyser();
-      if (analyser && this.visualizer) {
-        this.visualizer.start(analyser);
-        console.log('🎨 Visualizer started with analyser');
-      } else {
-        console.warn('⚠️ No analyser available for visualizer');
-      }
-    } else {
-      console.warn('⚠️ Audio processor not ready for visualizer');
-    }
-  }
-
-  stopVisualizer() {
-    if (this.visualizer) {
-      this.visualizer.stop();
-      console.log('🎨 Visualizer stopped');
-    }
-  }
-
-  // EQ Power Switch Methods - Enhanced with background persistence
-  async toggleEQPower(enabled) {
+  // GLOBAL EQ ONLY - NO LEGACY FALLBACK
+  async toggleGlobalEQ(enabled) {
     try {
-      // Reset retry count when manually toggling
-      this.retryCount = 0;
+      console.log('🌍 GLOBAL POPUP: Toggling global EQ to:', enabled);
       
-      // Save state to storage for persistence
-      this.state.shouldBeCapturing = enabled;
+      // Save state to storage
       await this.components.storage.save('eqEnabled', enabled);
       
-      // Update audio processor state
-      if (this.components.audioProcessor) {
-        if (this.components.audioProcessor.isInitialized) {
-          await this.components.audioProcessor.toggleEQ(enabled);
-        } else {
-          this.components.audioProcessor.eqEnabled = enabled;
-        }
-      }
-      
-      // Update UI
+      // Update UI immediately
       this.updateEQUI(enabled);
       
-      // Start or stop capture based on EQ state
       if (enabled) {
-        if (this.state.backgroundActive) {
-          // EQ was active in background, restart fresh session
-          console.log('🔄 Restarting EQ session...');
-          await this.stopCapture(); // Stop any existing session
-          await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause
-        }
-        
-        await this.ensureCapture();
-        console.log('🎛️ EQ enabled and capture started');
-        
+        console.log('🌍 GLOBAL POPUP: Starting global EQ...');
+        await this.startGlobalEQ();
       } else {
-        await this.stopCapture();
-        this.showNotification('EQ Disabled', 'Audio processing stopped', 'info');
-        console.log('🎛️ EQ disabled');
+        console.log('🛑 GLOBAL POPUP: Stopping global EQ...');
+        await this.stopGlobalEQ();
       }
       
     } catch (error) {
-      console.error('Error toggling EQ:', error);
-      this.showNotification('EQ Error', 'Failed to toggle equalizer: ' + error.message, 'error');
+      console.error('❌ GLOBAL POPUP: Error toggling EQ:', error);
+      this.showNotification('EQ Error', error.message, 'error');
       
       // Revert UI on error
       const checkbox = document.getElementById('eq-enabled');
       if (checkbox) checkbox.checked = !enabled;
+      this.updateEQUI(!enabled);
     }
   }
 
-  // Ensure capture is active when needed - Enhanced error handling
-  async ensureCapture() {
-    if (this.state.shouldBeCapturing && !this.state.isCapturing) {
-      if (this.retryCount >= this.maxRetries) {
-        console.error('🚫 Max retry attempts reached, stopping capture attempts');
+  async startGlobalEQ() {
+    try {
+      console.log('🌍 GLOBAL POPUP: === STARTING GLOBAL EQ ===');
+      
+      const settings = await this.components.storage.getCurrentSettings();
+      settings.eqBands = this.getCurrentEQValues();
+      
+      console.log('🌍 GLOBAL POPUP: Settings to send:', settings);
+      
+      const response = await chrome.runtime.sendMessage({
+        action: 'startGlobalEQ',
+        settings: settings
+      });
+      
+      console.log('🌍 GLOBAL POPUP: Background response:', response);
+      
+      if (response?.success) {
+        this.state.globalEQActive = true;
+        this.updateStatus('🌍 Global EQ Active', 'active');
+        this.updateGlobalEQUI(true);
+        
         this.showNotification(
-          'Capture Failed', 
-          'Unable to start EQ after multiple attempts. Make sure the tab is playing audio.', 
-          'error'
+          'Global EQ Started',
+          'EQ is now active on ALL tabs in your browser!',
+          'success'
         );
-        return;
+        
+        return true;
+      } else {
+        throw new Error(`Background returned unsuccessful: ${JSON.stringify(response)}`);
       }
       
-      try {
-        this.retryCount++;
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Failed to start global EQ:', error);
+      this.showNotification('Global EQ Failed', error.message, 'error');
+      return false;
+    }
+  }
+
+  async stopGlobalEQ() {
+    try {
+      console.log('🛑 GLOBAL POPUP: === STOPPING GLOBAL EQ ===');
+      
+      const response = await chrome.runtime.sendMessage({
+        action: 'stopGlobalEQ'
+      });
+      
+      console.log('🛑 GLOBAL POPUP: Stop response:', response);
+      
+      if (response?.success) {
+        this.state.globalEQActive = false;
+        this.updateStatus('Ready', 'active');
+        this.updateGlobalEQUI(false);
         
-        // Get current active tab
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tabs.length === 0) {
-          throw new Error('No active tab found');
-        }
-        
-        const currentTab = tabs[0];
-        console.log('🎯 Attempting to start EQ on tab:', {
-          id: currentTab.id,
-          url: currentTab.url,
-          title: currentTab.title
-        });
-        
-        // Start capture
-        await this.components.captureManager.start(currentTab.id, true);
-        
-        // Reset retry count on success
-        this.retryCount = 0;
-        
-        // Verify we have audio context and stream
-        const stream = this.components.captureManager.getActiveStream();
-        const audioContext = this.components.captureManager.getAudioContext();
-        
-        if (stream && audioContext) {
-          console.log('🎯 Audio capture successful:', {
-            streamTracks: stream.getAudioTracks().length,
-            audioContextState: audioContext.state
-          });
-        } else {
-          console.warn('⚠️ Audio capture incomplete - missing stream or context');
-        }
-        
-      } catch (error) {
-        console.error(`Failed to ensure capture (attempt ${this.retryCount}/${this.maxRetries}):`, error);
-        
-        let userMessage = `Attempt ${this.retryCount}: ${error.message}`;
-        if (error.message.includes('Tab must be playing audio')) {
-          userMessage = 'Please start playing audio in this tab first, then try again.';
-        }
-        
-        this.showNotification('Capture Failed', userMessage, 'error');
-        
-        if (this.retryCount < this.maxRetries) {
-          // Wait before retry, with exponential backoff
-          const delay = Math.pow(2, this.retryCount) * 1000;
-          console.log(`⏳ Waiting ${delay}ms before retry...`);
+        this.showNotification('Global EQ Stopped', 'EQ stopped on all tabs', 'info');
+        return true;
+      }
+      
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Error stopping global EQ:', error);
+    }
+    
+    return false;
+  }
+
+  updateEQBand(index, value) {
+    console.log(`🎛️ GLOBAL POPUP: Updating EQ band ${index} to ${value}dB`);
+    
+    const band = document.querySelectorAll('.eq-band')[index];
+    const valueDisplay = band.querySelector('.eq-value');
+    
+    if (valueDisplay) {
+      valueDisplay.textContent = `${value}dB`;
+    }
+    
+    // Update global EQ if active - NO LOCAL PROCESSING
+    if (this.state.globalEQActive) {
+      this.updateGlobalEQSettings();
+    }
+  }
+
+  async updateGlobalEQSettings() {
+    if (!this.state.globalEQActive) return;
+    
+    try {
+      const settings = await this.components.storage.getCurrentSettings();
+      settings.eqBands = this.getCurrentEQValues();
+      
+      console.log('⚙️ GLOBAL POPUP: Updating global EQ settings:', settings);
+      
+      await chrome.runtime.sendMessage({
+        action: 'updateGlobalEQSettings',
+        settings: settings
+      });
+      
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Failed to update global EQ settings:', error);
+    }
+  }
+
+  async applyEQPreset(preset) {
+    console.log('🎨 GLOBAL POPUP: Applying preset:', preset);
+    
+    const presets = {
+      flat: [0, 0, 0, 0, 0, 0, 0, 0],
+      bass: [8, 6, 4, 2, 0, -1, -2, -3],
+      vocal: [-2, -1, 0, 2, 4, 3, 1, -1],
+      treble: [-3, -2, -1, 0, 1, 3, 6, 8]
+    };
+    
+    const values = presets[preset] || presets.flat;
+    const sliders = document.querySelectorAll('.eq-band input');
+    
+    // Update UI
+    sliders.forEach((slider, index) => {
+      if (values[index] !== undefined) {
+        slider.value = values[index];
+        this.updateEQBand(index, values[index]);
+      }
+    });
+    
+    // Save to storage
+    await this.components.storage.save('eq', values);
+    
+    // Highlight active preset
+    document.querySelectorAll('.presets .btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    document.querySelector(`[data-preset="${preset}"]`)?.classList.add('active');
+    
+    this.showNotification(
+      'Preset Applied', 
+      `${preset.charAt(0).toUpperCase() + preset.slice(1)} EQ preset applied to all tabs`,
+      'success'
+    );
+  }
+
+  startGlobalStatusMonitoring() {
+    console.log('📡 GLOBAL POPUP: Starting global status monitoring...');
+    
+    this.globalStatusInterval = setInterval(async () => {
+      if (this.state.globalEQActive) {
+        try {
+          const response = await chrome.runtime.sendMessage({ action: 'getGlobalEQState' });
           
-          setTimeout(() => {
-            if (this.state.shouldBeCapturing && !this.state.isCapturing) {
-              this.ensureCapture();
-            }
-          }, delay);
-        } else {
-          // Max retries reached, revert UI
-          const checkbox = document.getElementById('eq-enabled');
-          if (checkbox) checkbox.checked = false;
-          this.updateEQUI(false);
+          if (!response?.isActive) {
+            console.log('🌍 GLOBAL POPUP: Global EQ appears to have stopped');
+            this.state.globalEQActive = false;
+            this.updateStatus('Ready', 'active');
+            this.updateGlobalEQUI(false);
+            
+            // Update UI
+            const checkbox = document.getElementById('eq-enabled');
+            if (checkbox) checkbox.checked = false;
+            this.updateEQUI(false);
+          }
+        } catch (error) {
+          // Extension might be reloading
         }
       }
-    }
+    }, 5000);
   }
 
-  // Stop capture
-  async stopCapture() {
-    if (this.state.isCapturing || this.state.backgroundActive) {
-      try {
-        await this.components.captureManager.stop();
-        this.state.backgroundActive = false;
-      } catch (error) {
-        console.error('Failed to stop capture:', error);
-      }
-    }
+  getCurrentEQValues() {
+    const sliders = document.querySelectorAll('.eq-band input');
+    const values = Array.from(sliders).map(slider => parseFloat(slider.value));
+    console.log('🔍 GLOBAL POPUP: Current EQ values:', values);
+    return values;
   }
 
+  // UI Update Methods
   updateEQUI(enabled) {
+    console.log('🎨 GLOBAL POPUP: Updating EQ UI, enabled:', enabled);
+    
     const checkbox = document.getElementById('eq-enabled');
     const powerSection = document.querySelector('.eq-power-section');
     const status = document.getElementById('eq-status');
     const container = document.querySelector('.eq-container');
     
-    // Force update checkbox state
     if (checkbox && checkbox.checked !== enabled) {
       checkbox.checked = enabled;
     }
@@ -334,16 +342,46 @@ class AudioEqualizer {
     if (container) {
       container.classList.toggle('disabled', !enabled);
     }
-    
-    // Update EQ sliders visual state
-    const sliders = document.querySelectorAll('.eq-slider');
-    sliders.forEach(slider => {
-      slider.style.opacity = enabled ? '1' : '0.5';
-    });
   }
 
-  // UI Update Methods
+  updateGlobalEQUI(enabled) {
+    console.log('🎨 GLOBAL POPUP: Updating global EQ UI, enabled:', enabled);
+    
+    const container = document.querySelector('.eq-container');
+    
+    if (container) {
+      container.classList.toggle('global-active', enabled);
+      
+      // Add global indicator
+      if (enabled && !container.querySelector('.global-indicator')) {
+        const indicator = document.createElement('div');
+        indicator.className = 'global-indicator';
+        indicator.innerHTML = '🌍 GLOBAL MODE ACTIVE';
+        indicator.style.cssText = `
+          position: absolute;
+          top: -15px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #007aff;
+          color: white;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 4px 12px;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+          z-index: 10;
+        `;
+        container.style.position = 'relative';
+        container.appendChild(indicator);
+      } else if (!enabled) {
+        const indicator = container.querySelector('.global-indicator');
+        if (indicator) indicator.remove();
+      }
+    }
+  }
+
   updateStatus(text, type) {
+    console.log('🎨 GLOBAL POPUP: Updating status:', text, type);
     const statusText = document.getElementById('status-text');
     const statusIcon = document.getElementById('status-icon');
     
@@ -351,49 +389,9 @@ class AudioEqualizer {
     if (statusIcon) statusIcon.className = `status-icon ${type}`;
   }
 
-  // EQ Methods
-  updateEQBand(index, value) {
-    const band = document.querySelectorAll('.eq-band')[index];
-    const valueDisplay = band.querySelector('.eq-value');
-    
-    if (valueDisplay) {
-      valueDisplay.textContent = `${value}dB`;
-    }
-    
-    // Update audio processor if active
-    if (this.components.audioProcessor && this.components.audioProcessor.isInitialized) {
-      this.components.audioProcessor.updateEQBand(index, parseFloat(value));
-    }
-  }
-
-  applyEQPreset(preset) {
-    const presets = {
-      flat: [0, 0, 0, 0, 0, 0, 0, 0],
-      bass: [8, 6, 4, 2, 0, -1, -2, -3],
-      vocal: [-2, -1, 0, 2, 4, 3, 1, -1],
-      treble: [-3, -2, -1, 0, 1, 3, 6, 8]
-    };
-    
-    const values = presets[preset] || presets.flat;
-    const sliders = document.querySelectorAll('.eq-band input');
-    
-    sliders.forEach((slider, index) => {
-      if (values[index] !== undefined) {
-        slider.value = values[index];
-        this.updateEQBand(index, values[index]);
-      }
-    });
-    
-    // Highlight active preset
-    document.querySelectorAll('.presets .btn').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    document.querySelector(`[data-preset="${preset}"]`).classList.add('active');
-    
-    this.showNotification('Preset Applied', `${preset.charAt(0).toUpperCase() + preset.slice(1)} EQ preset applied`, 'success');
-  }
-
   showNotification(title, message, type = 'info') {
+    console.log(`📢 GLOBAL POPUP: Notification [${type}]: ${title} - ${message}`);
+    
     const container = document.getElementById('notifications');
     if (!container) return;
     
@@ -411,7 +409,6 @@ class AudioEqualizer {
     
     container.appendChild(notification);
     
-    // Auto-remove after 7 seconds (increased for longer messages)
     setTimeout(() => {
       if (notification.parentNode) {
         notification.remove();
@@ -421,23 +418,11 @@ class AudioEqualizer {
 
   async loadSettings() {
     try {
-      // Load all settings
+      console.log('⚙️ GLOBAL POPUP: Loading settings...');
       const settings = await this.components.storage.getCurrentSettings();
+      console.log('⚙️ GLOBAL POPUP: Settings loaded:', settings);
       
-      // Set internal state
-      this.state.shouldBeCapturing = settings.eqEnabled;
-      
-      // Update EQ UI based on settings or background state
-      const actualEnabled = settings.eqEnabled || this.state.backgroundActive;
-      this.updateEQUI(actualEnabled);
-      
-      // Set audio processor state if it exists
-      if (this.components.audioProcessor) {
-        this.components.audioProcessor.eqEnabled = actualEnabled;
-        this.components.audioProcessor.eqValues = [...settings.eqBands];
-      }
-      
-      // Set EQ band values in UI
+      // Set EQ values in UI
       const sliders = document.querySelectorAll('.eq-band input');
       sliders.forEach((slider, index) => {
         if (settings.eqBands[index] !== undefined) {
@@ -446,42 +431,42 @@ class AudioEqualizer {
         }
       });
       
-      // Auto-start capture if EQ is enabled and not already active in background
-      if (settings.eqEnabled && !this.state.backgroundActive) {
-        console.log('🔄 Auto-starting EQ from saved settings...');
-        setTimeout(() => this.ensureCapture(), 1000);
-      }
+      // Update UI based on global EQ state only
+      this.updateEQUI(this.state.globalEQActive);
       
-      console.log('⚙️ Settings loaded:', {
-        eqEnabled: settings.eqEnabled,
-        backgroundActive: this.state.backgroundActive,
-        eqBands: settings.eqBands
-      });
+      console.log('✅ GLOBAL POPUP: Settings loading complete');
       
     } catch (error) {
-      console.error('Error loading settings:', error);
+      console.error('❌ GLOBAL POPUP: Error loading settings:', error);
     }
   }
 
-  // Cleanup when popup closes - register persistence
   cleanup() {
-    if (this.state.isCapturing) {
-      console.log('🎛️ Popup closing - EQ will continue in background');
-      // Don't stop capture, let it continue in background
-      // The background script will track the state
+    console.log('🧹 GLOBAL POPUP: Cleaning up...');
+    
+    // Stop monitoring
+    if (this.globalStatusInterval) {
+      clearInterval(this.globalStatusInterval);
+    }
+    
+    // Global EQ continues running in background - don't stop it
+    if (this.state.globalEQActive) {
+      console.log('🌍 GLOBAL POPUP: Popup closing - Global EQ will continue on all tabs');
     }
   }
 }
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  window.audioEqualizer = new AudioEqualizer();
-  window.audioEqualizer.init();
+  console.log('🚀 GLOBAL POPUP: DOM loaded, initializing Global-Only Audio Equalizer...');
+  window.globalAudioEqualizer = new GlobalOnlyAudioEqualizer();
+  window.globalAudioEqualizer.init();
 });
 
-// Handle popup closing - maintain background persistence
+// Handle popup closing
 window.addEventListener('beforeunload', () => {
-  if (window.audioEqualizer) {
-    window.audioEqualizer.cleanup();
+  console.log('👋 GLOBAL POPUP: Popup closing...');
+  if (window.globalAudioEqualizer) {
+    window.globalAudioEqualizer.cleanup();
   }
 });

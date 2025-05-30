@@ -1,51 +1,63 @@
-# EQ Translator - Git Ignore
-
-# Environment files
-.env
-.env.local
-.env.development
-.env.production
-config.json
-secrets.json
-
-# API Keys and sensitive config
-js/config/
-api-keys.js
-secrets.js
-
-# Claude settings
-**/.claude/settings.local.json
-
-# Node modules (if using any build tools)
+# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build outputs
-dist/
-build/
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE files
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Database
+*.db
+*.sqlite
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Chrome extension development
-*.pem
-*.crx
-key.pem
-
-# Temporary files
+# Temporary folders
 tmp/
 temp/
+
+# Backend specific
+backend/node_modules/
+backend/.env
+backend/logs/
+
+# Frontend specific  
+app/node_modules/
+app/.expo/
+app/dist/
+app/web-build/
+app/.expo-shared/

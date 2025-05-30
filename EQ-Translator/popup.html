@@ -16,16 +16,29 @@
     </header>
 
     <main>
+      <!-- Global Mode Toggle Section -->
+      <div class="global-mode-section">
+        <label class="global-mode-switch">
+          <input type="checkbox" id="global-mode">
+          <span class="global-switch-slider"></span>
+        </label>
+        <div class="mode-info">
+          <span class="mode-label">Single Tab Mode</span>
+          <span class="mode-description">EQ affects current tab only</span>
+        </div>
+        <span class="mode-badge">🌍</span>
+      </div>
+
       <!-- Single EQ Section -->
       <div class="eq-container">
         <!-- EQ Enable/Disable Switch -->
         <div class="eq-power-section">
           <label class="eq-power-switch">
-            <input type="checkbox" id="eq-enabled" checked>
+            <input type="checkbox" id="eq-enabled">
             <span class="eq-switch-slider"></span>
           </label>
           <span class="eq-power-label">Equalizer</span>
-          <span id="eq-status" class="eq-status active">ON</span>
+          <span id="eq-status" class="eq-status">OFF</span>
         </div>
 
         <!-- Audio Visualizer -->

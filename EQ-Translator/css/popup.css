@@ -1,4 +1,4 @@
-/* Audio Equalizer - Minimalist Single Section Design */
+/* Audio Equalizer - Enhanced with Global Mode Support */
 
 * {
   margin: 0;
@@ -76,6 +76,101 @@ main {
   border-radius: 0 0 12px 12px;
   flex: 1;
   min-height: fit-content;
+}
+
+/* Global Mode Section */
+.global-mode-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: #f8f8f8;
+  border-radius: 10px;
+  border: 2px solid #e5e5e7;
+  transition: all 0.3s ease;
+}
+
+.global-mode-section.active {
+  border-color: #007aff;
+  background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.1);
+}
+
+.global-mode-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.global-mode-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.global-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.global-switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.global-mode-switch input:checked + .global-switch-slider {
+  background-color: #007aff;
+}
+
+.global-mode-switch input:checked + .global-switch-slider:before {
+  transform: translateX(20px);
+}
+
+.mode-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mode-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.mode-description {
+  font-size: 11px;
+  color: #8e8e93;
+  font-style: italic;
+}
+
+.mode-badge {
+  font-size: 20px;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+
+.global-mode-section.active .mode-badge {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(0, 122, 255, 0.3));
 }
 
 /* Buttons */
@@ -191,6 +286,29 @@ main {
   padding: 20px;
   border: 1px solid #e5e5e7;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+}
+
+.eq-container.global-active {
+  border-color: #007aff;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.1);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fcff 100%);
+}
+
+.eq-container.global-active::before {
+  content: "🌍 GLOBAL MODE ACTIVE";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #007aff;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+  z-index: 10;
 }
 
 .eq-container.disabled .eq-sliders,
@@ -214,6 +332,12 @@ main {
   border-radius: 8px;
   border: 1px solid #333;
   text-align: center;
+  position: relative;
+}
+
+.eq-container.global-active .eq-visualizer {
+  border-color: #007aff;
+  box-shadow: inset 0 0 20px rgba(0, 122, 255, 0.1);
 }
 
 #visualizer-canvas {
@@ -228,6 +352,12 @@ main {
   font-size: 11px;
   color: #888;
   font-style: italic;
+}
+
+.eq-container.global-active .visualizer-info::after {
+  content: " (Global EQ Active)";
+  color: #007aff;
+  font-weight: 600;
 }
 
 /* EQ Sliders - Ultra-compact for 8 bands in 400px */
@@ -259,6 +389,11 @@ main {
   outline: none;
   cursor: pointer;
   border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.eq-container.global-active .eq-slider {
+  background: linear-gradient(90deg, #e5e5e7 0%, #cce7ff 100%);
 }
 
 .eq-slider::-webkit-slider-thumb {
@@ -269,6 +404,12 @@ main {
   background: #007aff;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3);
+  transition: all 0.2s ease;
+}
+
+.eq-container.global-active .eq-slider::-webkit-slider-thumb {
+  background: linear-gradient(135deg, #007aff 0%, #0056cc 100%);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.5);
 }
 
 .eq-slider::-moz-range-thumb {
@@ -300,6 +441,11 @@ main {
   line-height: 1;
 }
 
+.eq-container.global-active .eq-value {
+  color: #007aff;
+  font-weight: 600;
+}
+
 /* EQ Presets - Compact */
 .presets {
   display: flex;
@@ -314,6 +460,7 @@ main {
   font-weight: 500;
   font-size: 10px;
   padding: 4px 6px;
+  transition: all 0.2s ease;
 }
 
 .presets .btn:hover {
@@ -323,6 +470,11 @@ main {
 .presets .btn.active {
   background: #007aff;
   color: white;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+.eq-container.global-active .presets .btn {
+  border-width: 2px;
 }
 
 /* Notifications */
@@ -348,10 +500,17 @@ main {
 
 .notification.success {
   border-color: #34c759;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fff4 100%);
 }
 
 .notification.error {
   border-color: #ff3b30;
+  background: linear-gradient(135deg, #ffffff 0%, #fff5f5 100%);
+}
+
+.notification.info {
+  border-color: #007aff;
+  background: linear-gradient(135deg, #ffffff 0%, #f0f8ff 100%);
 }
 
 .notification .title {
@@ -384,6 +543,20 @@ main {
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+/* Global EQ Active Animation */
+.eq-container.global-active {
+  animation: global-pulse 3s ease-in-out infinite;
+}
+
+@keyframes global-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 16px rgba(0, 122, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 8px 24px rgba(0, 122, 255, 0.2);
   }
 }
 

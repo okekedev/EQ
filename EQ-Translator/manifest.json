@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Flip Phone",
-  "version": "1.0.0",
-  "description": "Retro audio equalizer with that classic flip phone vibe 📱",
+  "name": "Flip Phone - Global EQ",
+  "version": "2.1.1",
+  "description": "🌍 Global audio equalizer that works on ALL tabs - retro flip phone vibes for your entire browser! 📱",
   "permissions": [
     "tabCapture",
     "storage",
@@ -24,6 +24,19 @@
   "background": {
     "service_worker": "js/background.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "js/global-content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
   "icons": {
     "16": "images/icon16.png",
     "48": "images/icon48.png",
