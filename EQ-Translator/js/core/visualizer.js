@@ -1,4 +1,4 @@
-// Audio Visualizer - Retro EQ Display with Smooth Flowing Bars
+// Enhanced Audio Visualizer - 64-bar retro spectrum connected to real audio
 class AudioVisualizer {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
@@ -6,22 +6,43 @@ class AudioVisualizer {
     this.animationId = null;
     this.analyser = null;
     this.isActive = false;
+    this.audioContext = null;
+    this.sourceNode = null;
     
-    // Visual configuration - optimized for musical frequencies
+    // Enhanced configuration for 64-bar spectrum
     this.config = {
-      numBars: 32, // Optimal for musical frequency representation
-      minBarHeight: 3,
-      maxBarHeight: 0.85,
-      smoothingFactor: 0.35, // Balanced responsiveness
-      spacing: 2, // Better spacing for readability
-      borderRadius: 3,
-      glowIntensity: 6,
-      scanLineSpacing: 3,
-      scanLineOpacity: 0.08
+      numBars: 64, // 64 bars for detailed spectrum
+      minBarHeight: 2,
+      maxBarHeight: 0.9,
+      smoothingFactor: 0.25, // More responsive for spectrum display
+      spacing: 1, // Tighter spacing for more bars
+      borderRadius: 2,
+      glowIntensity: 4,
+      scanLineSpacing: 4,
+      scanLineOpacity: 0.06,
+      
+      // Frequency mapping to match our EQ bands
+      minFreq: 20,   // Start from 20Hz
+      maxFreq: 20000, // Go up to 20kHz
+      
+      // EQ band frequencies for color mapping
+      eqBands: [60, 170, 310, 600, 1000, 3000, 6000, 8000],
+      eqColors: [
+        '#ff4444', // Bass - Red
+        '#ff8844', // Low-Mid - Orange  
+        '#ffaa44', // Lower Mid - Yellow-Orange
+        '#ffdd44', // Mid - Yellow
+        '#44ff44', // Upper Mid - Green
+        '#44ddff', // High-Mid - Cyan
+        '#4488ff', // High - Blue
+        '#8844ff'  // Treble - Purple
+      ]
     };
     
     // Animation state
     this.barHeights = new Array(this.config.numBars).fill(0);
+    this.barPeaks = new Array(this.config.numBars).fill(0);
+    this.peakDecay = new Array(this.config.numBars).fill(0);
     
     this.init();
   }
@@ -46,7 +67,7 @@ class AudioVisualizer {
     // Start with empty visualization
     this.drawEmpty();
     
-    console.log('🎨 Audio visualizer initialized');
+    console.log('🎨 64-bar spectrum visualizer initialized');
     return true;
   }
 
@@ -69,18 +90,49 @@ class AudioVisualizer {
     }
   }
 
-  start(analyser) {
-    if (!analyser) {
-      console.error('No analyser provided to visualizer');
+  // Connect to actual audio stream from global EQ
+  connectToAudioStream(audioContext, sourceNode) {
+    try {
+      console.log('🔗 Connecting visualizer to audio stream...');
+      
+      this.audioContext = audioContext;
+      this.sourceNode = sourceNode;
+      
+      // Create dedicated analyser for visualization
+      this.analyser = audioContext.createAnalyser();
+      this.analyser.fftSize = 2048; // Higher resolution for 64 bars
+      this.analyser.smoothingTimeConstant = 0.3; // Balanced smoothing
+      this.analyser.minDecibels = -90;
+      this.analyser.maxDecibels = -10;
+      
+      // Connect source to analyser (this doesn't affect the audio output)
+      sourceNode.connect(this.analyser);
+      
+      console.log('✅ Visualizer connected to audio stream');
+      return true;
+      
+    } catch (error) {
+      console.error('❌ Failed to connect visualizer to audio stream:', error);
+      return false;
+    }
+  }
+
+  start(analyser = null) {
+    // If analyser is provided directly, use it
+    if (analyser) {
+      this.analyser = analyser;
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.3;
+    }
+    
+    if (!this.analyser) {
+      console.error('No analyser available for visualizer');
       return false;
     }
     
-    this.analyser = analyser;
-    this.analyser.fftSize = 512; // Increased for better frequency resolution
-    this.analyser.smoothingTimeConstant = 0.6; // Smoother frequency data
     this.isActive = true;
     
-    console.log('🎨 Starting audio visualization with', this.analyser.frequencyBinCount, 'frequency bins');
+    console.log('🎨 Starting 64-bar spectrum visualization');
     this.animate();
     return true;
   }
@@ -93,10 +145,10 @@ class AudioVisualizer {
       this.animationId = null;
     }
     
-    this.analyser = null;
+    // Don't disconnect the analyser as it might be used by the EQ
     this.drawEmpty();
     
-    console.log('🎨 Audio visualization stopped');
+    console.log('🎨 Spectrum visualization stopped');
   }
 
   animate() {
@@ -109,56 +161,68 @@ class AudioVisualizer {
     const dataArray = new Uint8Array(bufferLength);
     this.analyser.getByteFrequencyData(dataArray);
     
-    // Update bar heights with smoothing
-    this.updateBarHeights(dataArray, bufferLength);
+    // Update bar heights with frequency mapping
+    this.updateSpectrumBars(dataArray, bufferLength);
     
-    // Draw the visualization
+    // Draw the spectrum
     this.draw();
   }
 
-  updateBarHeights(dataArray, bufferLength) {
-    // Music-focused frequency distribution (most music content is 20Hz-20kHz, emphasis on 20Hz-8kHz)
-    // Use logarithmic distribution to better represent musical frequencies
-    const sampleRate = 44100; // Standard sample rate
-    const nyquist = sampleRate / 2; // 22050 Hz
-    const minFreq = 20; // 20 Hz - lowest musical frequency
-    const maxFreq = 16000; // 16 kHz - covers most important musical content
+  updateSpectrumBars(dataArray, bufferLength) {
+    const sampleRate = this.audioContext?.sampleRate || 44100;
+    const nyquist = sampleRate / 2;
+    
+    // Logarithmic frequency distribution for musical spectrum
+    const minLog = Math.log(this.config.minFreq);
+    const maxLog = Math.log(this.config.maxFreq);
+    const logRange = maxLog - minLog;
     
     for (let i = 0; i < this.config.numBars; i++) {
-      // Logarithmic frequency mapping for musical content
-      const freqRatio = i / (this.config.numBars - 1);
+      // Calculate target frequency for this bar using logarithmic scale
+      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
+      const targetFreq = Math.exp(logFreq);
       
-      // Use logarithmic scale: more bars for lower frequencies where most musical content lives
-      const logMin = Math.log(minFreq);
-      const logMax = Math.log(maxFreq);
-      const targetFreq = Math.exp(logMin + freqRatio * (logMax - logMin));
-      
-      // Convert frequency to bin index
+      // Convert frequency to FFT bin index
       const binIndex = Math.floor((targetFreq / nyquist) * bufferLength);
       const clampedBinIndex = Math.max(0, Math.min(binIndex, bufferLength - 1));
       
-      // Use a small range around the target frequency for smoother visualization
-      const rangeSize = Math.max(1, Math.floor(bufferLength / this.config.numBars / 4));
+      // Average several bins for smoother visualization
+      const binRange = Math.max(1, Math.floor(bufferLength / this.config.numBars / 2));
       let sum = 0;
       let count = 0;
       
-      for (let j = Math.max(0, clampedBinIndex - rangeSize); 
-           j <= Math.min(bufferLength - 1, clampedBinIndex + rangeSize); j++) {
+      for (let j = Math.max(0, clampedBinIndex - binRange); 
+           j <= Math.min(bufferLength - 1, clampedBinIndex + binRange); j++) {
         sum += dataArray[j];
         count++;
       }
       
-      // Calculate average amplitude for this frequency range
+      // Calculate normalized height
       const avgValue = count > 0 ? sum / count : 0;
       const height = this.canvas.height / 2;
       const targetHeight = (avgValue / 255) * height * this.config.maxBarHeight;
       
-      // Smooth animation with easing
-      const easingFactor = this.config.smoothingFactor;
-      this.barHeights[i] += (targetHeight - this.barHeights[i]) * easingFactor;
+      // Smooth animation with faster attack, slower decay
+      const currentHeight = this.barHeights[i];
+      if (targetHeight > currentHeight) {
+        // Fast attack
+        this.barHeights[i] += (targetHeight - currentHeight) * 0.6;
+      } else {
+        // Slower decay
+        this.barHeights[i] += (targetHeight - currentHeight) * this.config.smoothingFactor;
+      }
       
       // Ensure minimum height for visual appeal
       this.barHeights[i] = Math.max(this.barHeights[i], this.config.minBarHeight);
+      
+      // Peak tracking for retro effect
+      if (this.barHeights[i] > this.barPeaks[i]) {
+        this.barPeaks[i] = this.barHeights[i];
+        this.peakDecay[i] = 0;
+      } else {
+        this.peakDecay[i] += 0.5;
+        this.barPeaks[i] = Math.max(this.barHeights[i], this.barPeaks[i] - this.peakDecay[i]);
+      }
     }
   }
 
@@ -169,106 +233,140 @@ class AudioVisualizer {
     // Clear canvas with retro gradient background
     this.drawBackground(width, height);
     
-    // Draw the frequency bars
-    this.drawBars(width, height);
+    // Draw the spectrum bars
+    this.drawSpectrumBars(width, height);
     
     // Add retro effects
     this.drawScanLines(width, height);
+    this.drawFrequencyLabels(width, height);
   }
 
   drawBackground(width, height) {
     const bgGradient = this.ctx.createLinearGradient(0, 0, width, height);
     bgGradient.addColorStop(0, '#0a0a0a');
-    bgGradient.addColorStop(0.5, '#1a0a1a');
+    bgGradient.addColorStop(0.3, '#1a0a1a');
+    bgGradient.addColorStop(0.7, '#0a1a1a');
     bgGradient.addColorStop(1, '#0a0a2a');
     
     this.ctx.fillStyle = bgGradient;
     this.ctx.fillRect(0, 0, width, height);
   }
 
-  drawBars(width, height) {
+  drawSpectrumBars(width, height) {
     const barWidth = (width - (this.config.numBars + 1) * this.config.spacing) / this.config.numBars;
     
     for (let i = 0; i < this.config.numBars; i++) {
       const x = i * (barWidth + this.config.spacing) + this.config.spacing;
       const barHeight = Math.max(this.barHeights[i], this.config.minBarHeight);
+      const peakHeight = this.barPeaks[i];
       
-      // Create retro multicolor gradient for each bar
-      const gradient = this.createBarGradient(i, barHeight, height);
+      // Calculate frequency for this bar
+      const minLog = Math.log(this.config.minFreq);
+      const maxLog = Math.log(this.config.maxFreq);
+      const logRange = maxLog - minLog;
+      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
+      const frequency = Math.exp(logFreq);
+      
+      // Get color based on frequency range
+      const { hue, saturation, lightness } = this.getFrequencyColor(frequency, barHeight, height);
+      
+      // Draw main bar with gradient
+      const gradient = this.ctx.createLinearGradient(0, height - barHeight, 0, height);
+      gradient.addColorStop(0, `hsl(${hue}, ${saturation}%, ${lightness + 30}%)`);
+      gradient.addColorStop(0.3, `hsl(${hue + 10}, ${saturation - 5}%, ${lightness + 15}%)`);
+      gradient.addColorStop(0.7, `hsl(${hue + 20}, ${saturation - 10}%, ${lightness}%)`);
+      gradient.addColorStop(1, `hsl(${hue + 30}, ${saturation - 15}%, ${lightness - 10}%)`);
       
       this.ctx.fillStyle = gradient;
       
-      // Draw main bar with rounded top
+      // Draw bar with rounded top
       this.ctx.beginPath();
       this.ctx.roundRect(x, height - barHeight, barWidth, barHeight, [this.config.borderRadius, this.config.borderRadius, 0, 0]);
       this.ctx.fill();
       
-      // Add retro glow effect
-      const hue = this.getBarHue(i, barHeight, height);
+      // Add glow effect
       this.ctx.shadowColor = `hsl(${hue}, 90%, 60%)`;
       this.ctx.shadowBlur = this.config.glowIntensity;
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
       
-      // Add subtle reflection at the bottom
+      // Draw peak indicator
+      if (peakHeight > barHeight + 2) {
+        this.ctx.fillStyle = `hsl(${hue}, 100%, 80%)`;
+        this.ctx.fillRect(x, height - peakHeight - 2, barWidth, 2);
+      }
+      
+      // Add subtle reflection
       this.drawBarReflection(x, barWidth, height, hue);
     }
   }
 
-  createBarGradient(barIndex, barHeight, canvasHeight) {
-    const hue = this.getBarHue(barIndex, barHeight, canvasHeight);
-    const intensity = barHeight / (canvasHeight * this.config.maxBarHeight);
+  getFrequencyColor(frequency, barHeight, canvasHeight) {
+    // Map frequency to EQ band colors
+    const eqBands = this.config.eqBands;
+    const eqColors = this.config.eqColors;
     
-    // More vibrant colors with intensity-based saturation
-    const saturationBase = 85 + (intensity * 15); // 85-100% saturation
-    const lightnessBase = 50 + (intensity * 25); // 50-75% lightness
-    
-    const gradient = this.ctx.createLinearGradient(0, canvasHeight - barHeight, 0, canvasHeight);
-    
-    gradient.addColorStop(0, `hsl(${hue}, ${saturationBase}%, ${lightnessBase + 20}%)`);
-    gradient.addColorStop(0.3, `hsl(${hue + 15}, ${saturationBase - 5}%, ${lightnessBase + 10}%)`);
-    gradient.addColorStop(0.7, `hsl(${hue + 30}, ${saturationBase - 10}%, ${lightnessBase}%)`);
-    gradient.addColorStop(1, `hsl(${hue + 45}, ${saturationBase - 15}%, ${lightnessBase - 10}%)`);
-    
-    return gradient;
-  }
-
-  getBarHue(barIndex, barHeight, canvasHeight) {
-    // Color mapping for musical frequencies:
-    // Bass (20-200Hz) = Red/Orange
-    // Low-Mid (200-800Hz) = Yellow/Green  
-    // Mid (800-3kHz) = Green/Cyan
-    // High-Mid (3-8kHz) = Cyan/Blue
-    // Treble (8-16kHz) = Blue/Purple
-    
-    const freqRatio = barIndex / this.config.numBars;
-    let baseHue;
-    
-    if (freqRatio < 0.2) {
-      // Bass frequencies: Red to Orange (0-30 degrees)
-      baseHue = freqRatio * 5 * 30;
-    } else if (freqRatio < 0.4) {
-      // Low-mid frequencies: Orange to Yellow (30-60 degrees)
-      baseHue = 30 + (freqRatio - 0.2) * 5 * 30;
-    } else if (freqRatio < 0.6) {
-      // Mid frequencies: Yellow to Green (60-120 degrees)
-      baseHue = 60 + (freqRatio - 0.4) * 5 * 60;
-    } else if (freqRatio < 0.8) {
-      // High-mid frequencies: Green to Cyan (120-180 degrees)
-      baseHue = 120 + (freqRatio - 0.6) * 5 * 60;
-    } else {
-      // Treble frequencies: Cyan to Purple (180-280 degrees)
-      baseHue = 180 + (freqRatio - 0.8) * 5 * 100;
+    let bandIndex = 0;
+    for (let i = 0; i < eqBands.length - 1; i++) {
+      if (frequency >= eqBands[i] && frequency < eqBands[i + 1]) {
+        bandIndex = i;
+        break;
+      } else if (frequency >= eqBands[eqBands.length - 1]) {
+        bandIndex = eqBands.length - 1;
+        break;
+      }
     }
     
+    // Convert hex color to HSL for manipulation
+    const hexColor = eqColors[bandIndex];
+    const { h, s, l } = this.hexToHsl(hexColor);
+    
+    // Adjust brightness based on bar height
     const intensity = barHeight / (canvasHeight * this.config.maxBarHeight);
-    return baseHue + (intensity * 15); // Slight hue shift based on intensity
+    const adjustedLightness = Math.min(80, l + (intensity * 30));
+    const adjustedSaturation = Math.min(100, s + (intensity * 20));
+    
+    return {
+      hue: h,
+      saturation: adjustedSaturation,
+      lightness: adjustedLightness
+    };
+  }
+
+  hexToHsl(hex) {
+    // Convert hex to RGB
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    
+    if (max === min) {
+      h = s = 0; // achromatic
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+    
+    return {
+      h: Math.round(h * 360),
+      s: Math.round(s * 100),
+      l: Math.round(l * 100)
+    };
   }
 
   drawBarReflection(x, barWidth, height, hue) {
-    const reflectionHeight = 10;
+    const reflectionHeight = 8;
     const reflectionGradient = this.ctx.createLinearGradient(0, height, 0, height - reflectionHeight);
-    reflectionGradient.addColorStop(0, `hsla(${hue}, 70%, 50%, 0.3)`);
+    reflectionGradient.addColorStop(0, `hsla(${hue}, 70%, 50%, 0.2)`);
     reflectionGradient.addColorStop(1, `hsla(${hue}, 70%, 50%, 0)`);
     
     this.ctx.fillStyle = reflectionGradient;
@@ -277,7 +375,7 @@ class AudioVisualizer {
 
   drawScanLines(width, height) {
     this.ctx.strokeStyle = `rgba(0, 255, 255, ${this.config.scanLineOpacity})`;
-    this.ctx.lineWidth = 1;
+    this.ctx.lineWidth = 0.5;
     
     for (let y = 0; y < height; y += this.config.scanLineSpacing) {
       this.ctx.beginPath();
@@ -285,6 +383,30 @@ class AudioVisualizer {
       this.ctx.lineTo(width, y);
       this.ctx.stroke();
     }
+  }
+
+  drawFrequencyLabels(width, height) {
+    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
+    this.ctx.font = '8px "Courier New", monospace';
+    this.ctx.textAlign = 'center';
+    
+    // Draw frequency markers at key points
+    const markers = [
+      { freq: 60, label: '60Hz' },
+      { freq: 1000, label: '1kHz' },
+      { freq: 8000, label: '8kHz' }
+    ];
+    
+    markers.forEach(marker => {
+      const minLog = Math.log(this.config.minFreq);
+      const maxLog = Math.log(this.config.maxFreq);
+      const logRange = maxLog - minLog;
+      const markerLog = Math.log(marker.freq);
+      const position = (markerLog - minLog) / logRange;
+      const x = position * width;
+      
+      this.ctx.fillText(marker.label, x, height - 4);
+    });
   }
 
   drawEmpty() {
@@ -296,8 +418,8 @@ class AudioVisualizer {
     // Clear with retro gradient background
     this.drawBackground(width, height);
     
-    // Draw static retro bars at low height
-    this.drawStaticBars(width, height);
+    // Draw static spectrum bars at low height
+    this.drawStaticSpectrum(width, height);
     
     // Add retro scan lines
     this.drawScanLines(width, height);
@@ -305,47 +427,52 @@ class AudioVisualizer {
     // Draw placeholder text
     this.drawPlaceholderText(width, height);
     
-    // Add retro border glow
-    this.drawBorderGlow(width, height);
+    // Add frequency labels
+    this.drawFrequencyLabels(width, height);
   }
 
-  drawStaticBars(width, height) {
+  drawStaticSpectrum(width, height) {
     const barWidth = (width - (this.config.numBars + 1) * this.config.spacing) / this.config.numBars;
-    const staticHeight = 8;
+    const staticHeight = 4;
     
     for (let i = 0; i < this.config.numBars; i++) {
       const x = i * (barWidth + this.config.spacing) + this.config.spacing;
-      const hue = (i / this.config.numBars) * 300;
+      
+      // Calculate frequency for color
+      const minLog = Math.log(this.config.minFreq);
+      const maxLog = Math.log(this.config.maxFreq);
+      const logRange = maxLog - minLog;
+      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
+      const frequency = Math.exp(logFreq);
+      
+      const { hue } = this.getFrequencyColor(frequency, staticHeight, height);
       
       // Dim colors for inactive state
       const gradient = this.ctx.createLinearGradient(0, height - staticHeight, 0, height);
-      gradient.addColorStop(0, `hsla(${hue}, 60%, 30%, 0.6)`);
-      gradient.addColorStop(1, `hsla(${hue + 60}, 50%, 20%, 0.4)`);
+      gradient.addColorStop(0, `hsla(${hue}, 40%, 25%, 0.4)`);
+      gradient.addColorStop(1, `hsla(${hue + 60}, 30%, 15%, 0.3)`);
       
       this.ctx.fillStyle = gradient;
       this.ctx.beginPath();
-      this.ctx.roundRect(x, height - staticHeight, barWidth, staticHeight, [2, 2, 0, 0]);
+      this.ctx.roundRect(x, height - staticHeight, barWidth, staticHeight, [1, 1, 0, 0]);
       this.ctx.fill();
     }
   }
 
   drawPlaceholderText(width, height) {
-    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.4)';
-    this.ctx.font = '12px "Courier New", monospace';
+    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+    this.ctx.font = '11px "Courier New", monospace';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('AUDIO VISUALIZATION READY', width / 2, height / 2 + 20);
-  }
-
-  drawBorderGlow(width, height) {
-    this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeRect(2, 2, width - 4, height - 4);
+    this.ctx.fillText('64-BAR SPECTRUM ANALYZER', width / 2, height / 2 - 8);
+    this.ctx.font = '9px "Courier New", monospace';
+    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+    this.ctx.fillText('Enable Global EQ to see live audio', width / 2, height / 2 + 8);
   }
 
   // Configuration methods
   setConfig(newConfig) {
     this.config = { ...this.config, ...newConfig };
-    console.log('🎨 Visualizer config updated:', this.config);
+    console.log('🎨 Spectrum visualizer config updated:', this.config);
   }
 
   getConfig() {
@@ -367,7 +494,9 @@ class AudioVisualizer {
     this.canvas = null;
     this.ctx = null;
     this.barHeights = null;
-    console.log('🎨 Visualizer destroyed');
+    this.barPeaks = null;
+    this.peakDecay = null;
+    console.log('🎨 Spectrum visualizer destroyed');
   }
 }
 
