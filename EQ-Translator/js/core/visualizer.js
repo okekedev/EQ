@@ -9,9 +9,9 @@ class AudioVisualizer {
     this.audioContext = null;
     this.sourceNode = null;
     
-    // Enhanced configuration for 64-bar spectrum
+    // Enhanced configuration for 6-bar EQ visualization
     this.config = {
-      numBars: 64, // 64 bars for detailed spectrum
+      numBars: 6, // 6 bars matching EQ frequency bands
       minBarHeight: 2,
       maxBarHeight: 0.9,
       smoothingFactor: 0.25, // More responsive for spectrum display
@@ -21,20 +21,15 @@ class AudioVisualizer {
       scanLineSpacing: 4,
       scanLineOpacity: 0.06,
       
-      // Frequency mapping to match our EQ bands
-      minFreq: 20,   // Start from 20Hz
-      maxFreq: 20000, // Go up to 20kHz
-      
-      // EQ band frequencies for color mapping
-      eqBands: [60, 170, 310, 600, 1000, 3000, 6000, 8000],
+      // EQ band frequencies and colors (6 bands to match your sliders)
+      eqBands: [170, 310, 600, 1000, 3000, 6000], // Skip 60Hz and 8kHz for cleaner look
+      eqLabels: ['170Hz', '310Hz', '600Hz', '1kHz', '3kHz', '6kHz'],
       eqColors: [
-        '#ff4444', // Bass - Red
+        '#ff4444', // Low - Red
         '#ff8844', // Low-Mid - Orange  
-        '#ffaa44', // Lower Mid - Yellow-Orange
         '#ffdd44', // Mid - Yellow
-        '#44ff44', // Upper Mid - Green
-        '#44ddff', // High-Mid - Cyan
-        '#4488ff', // High - Blue
+        '#44ff44', // Mid-High - Green
+        '#44ddff', // High - Cyan
         '#8844ff'  // Treble - Purple
       ]
     };
@@ -172,22 +167,16 @@ class AudioVisualizer {
     const sampleRate = this.audioContext?.sampleRate || 44100;
     const nyquist = sampleRate / 2;
     
-    // Logarithmic frequency distribution for musical spectrum
-    const minLog = Math.log(this.config.minFreq);
-    const maxLog = Math.log(this.config.maxFreq);
-    const logRange = maxLog - minLog;
-    
+    // Map each bar to a specific EQ frequency band
     for (let i = 0; i < this.config.numBars; i++) {
-      // Calculate target frequency for this bar using logarithmic scale
-      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
-      const targetFreq = Math.exp(logFreq);
+      const targetFreq = this.config.eqBands[i];
       
       // Convert frequency to FFT bin index
       const binIndex = Math.floor((targetFreq / nyquist) * bufferLength);
       const clampedBinIndex = Math.max(0, Math.min(binIndex, bufferLength - 1));
       
-      // Average several bins for smoother visualization
-      const binRange = Math.max(1, Math.floor(bufferLength / this.config.numBars / 2));
+      // Average several bins around the target frequency for smoother visualization
+      const binRange = Math.max(1, Math.floor(bufferLength / 256)); // Wider range for 6 bars
       let sum = 0;
       let count = 0;
       
@@ -206,7 +195,7 @@ class AudioVisualizer {
       const currentHeight = this.barHeights[i];
       if (targetHeight > currentHeight) {
         // Fast attack
-        this.barHeights[i] += (targetHeight - currentHeight) * 0.6;
+        this.barHeights[i] += (targetHeight - currentHeight) * 0.7;
       } else {
         // Slower decay
         this.barHeights[i] += (targetHeight - currentHeight) * this.config.smoothingFactor;
@@ -260,14 +249,10 @@ class AudioVisualizer {
       const barHeight = Math.max(this.barHeights[i], this.config.minBarHeight);
       const peakHeight = this.barPeaks[i];
       
-      // Calculate frequency for this bar
-      const minLog = Math.log(this.config.minFreq);
-      const maxLog = Math.log(this.config.maxFreq);
-      const logRange = maxLog - minLog;
-      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
-      const frequency = Math.exp(logFreq);
+      // Use the specific EQ frequency for this bar
+      const frequency = this.config.eqBands[i];
       
-      // Get color based on frequency range
+      // Get color based on frequency
       const { hue, saturation, lightness } = this.getFrequencyColor(frequency, barHeight, height);
       
       // Draw main bar with gradient
@@ -298,27 +283,24 @@ class AudioVisualizer {
       
       // Add subtle reflection
       this.drawBarReflection(x, barWidth, height, hue);
+      
+      // Draw frequency label below each bar
+      this.drawFrequencyLabel(x + barWidth/2, height, this.config.eqLabels[i]);
     }
   }
 
   getFrequencyColor(frequency, barHeight, canvasHeight) {
-    // Map frequency to EQ band colors
-    const eqBands = this.config.eqBands;
-    const eqColors = this.config.eqColors;
-    
+    // Find which EQ band this frequency belongs to
     let bandIndex = 0;
-    for (let i = 0; i < eqBands.length - 1; i++) {
-      if (frequency >= eqBands[i] && frequency < eqBands[i + 1]) {
+    for (let i = 0; i < this.config.eqBands.length; i++) {
+      if (frequency === this.config.eqBands[i]) {
         bandIndex = i;
-        break;
-      } else if (frequency >= eqBands[eqBands.length - 1]) {
-        bandIndex = eqBands.length - 1;
         break;
       }
     }
     
-    // Convert hex color to HSL for manipulation
-    const hexColor = eqColors[bandIndex];
+    // Get color from our EQ color palette
+    const hexColor = this.config.eqColors[bandIndex];
     const { h, s, l } = this.hexToHsl(hexColor);
     
     // Adjust brightness based on bar height
@@ -385,28 +367,16 @@ class AudioVisualizer {
     }
   }
 
-  drawFrequencyLabels(width, height) {
-    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.6)';
-    this.ctx.font = '8px "Courier New", monospace';
+  drawFrequencyLabel(x, y, label) {
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    this.ctx.font = '10px "Courier New", monospace';
     this.ctx.textAlign = 'center';
-    
-    // Draw frequency markers at key points
-    const markers = [
-      { freq: 60, label: '60Hz' },
-      { freq: 1000, label: '1kHz' },
-      { freq: 8000, label: '8kHz' }
-    ];
-    
-    markers.forEach(marker => {
-      const minLog = Math.log(this.config.minFreq);
-      const maxLog = Math.log(this.config.maxFreq);
-      const logRange = maxLog - minLog;
-      const markerLog = Math.log(marker.freq);
-      const position = (markerLog - minLog) / logRange;
-      const x = position * width;
-      
-      this.ctx.fillText(marker.label, x, height - 4);
-    });
+    this.ctx.fillText(label, x, y - 8);
+  }
+
+  drawFrequencyLabels(width, height) {
+    // Labels are now drawn individually with each bar
+    // This method kept for compatibility but not used
   }
 
   drawEmpty() {
@@ -433,40 +403,43 @@ class AudioVisualizer {
 
   drawStaticSpectrum(width, height) {
     const barWidth = (width - (this.config.numBars + 1) * this.config.spacing) / this.config.numBars;
-    const staticHeight = 4;
+    const staticHeight = 6;
     
     for (let i = 0; i < this.config.numBars; i++) {
       const x = i * (barWidth + this.config.spacing) + this.config.spacing;
       
-      // Calculate frequency for color
-      const minLog = Math.log(this.config.minFreq);
-      const maxLog = Math.log(this.config.maxFreq);
-      const logRange = maxLog - minLog;
-      const logFreq = minLog + (i / (this.config.numBars - 1)) * logRange;
-      const frequency = Math.exp(logFreq);
-      
+      // Use the specific EQ frequency for color
+      const frequency = this.config.eqBands[i];
       const { hue } = this.getFrequencyColor(frequency, staticHeight, height);
       
       // Dim colors for inactive state
       const gradient = this.ctx.createLinearGradient(0, height - staticHeight, 0, height);
-      gradient.addColorStop(0, `hsla(${hue}, 40%, 25%, 0.4)`);
-      gradient.addColorStop(1, `hsla(${hue + 60}, 30%, 15%, 0.3)`);
+      gradient.addColorStop(0, `hsla(${hue}, 40%, 25%, 0.6)`);
+      gradient.addColorStop(1, `hsla(${hue + 60}, 30%, 15%, 0.4)`);
       
       this.ctx.fillStyle = gradient;
       this.ctx.beginPath();
       this.ctx.roundRect(x, height - staticHeight, barWidth, staticHeight, [1, 1, 0, 0]);
       this.ctx.fill();
+      
+      // Draw frequency label below each bar
+      this.drawFrequencyLabel(x + barWidth/2, height, this.config.eqLabels[i]);
     }
   }
 
   drawPlaceholderText(width, height) {
-    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-    this.ctx.font = '11px "Courier New", monospace';
+    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
+    this.ctx.font = 'bold 14px "Courier New", monospace';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('64-BAR SPECTRUM ANALYZER', width / 2, height / 2 - 8);
+    this.ctx.fillText('6-BAND EQ VISUALIZER', width / 2, height / 2 - 15);
+    
+    this.ctx.font = '11px "Courier New", monospace';
+    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
+    this.ctx.fillText('Enable Global EQ to see live audio', width / 2, height / 2 + 5);
+    
     this.ctx.font = '9px "Courier New", monospace';
-    this.ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
-    this.ctx.fillText('Enable Global EQ to see live audio', width / 2, height / 2 + 8);
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    this.ctx.fillText('Each bar represents an EQ frequency band', width / 2, height / 2 + 20);
   }
 
   // Configuration methods

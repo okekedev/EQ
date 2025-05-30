@@ -65,54 +65,11 @@ class GlobalAudioEqualizer {
     console.log('🎨 GLOBAL POPUP: Starting demo visualizer...');
     this.demoMode = true;
     
-    // Create a proper mock analyser object
-    const mockAnalyser = {
-      frequencyBinCount: 1024,
-      fftSize: 2048,
-      smoothingTimeConstant: 0.3,
-      minDecibels: -90,
-      maxDecibels: -10,
-      getByteFrequencyData: function(array) {
-        // Generate demo frequency data
-        const time = Date.now() * 0.001;
-        for (let i = 0; i < array.length; i++) {
-          const freq = (i / array.length) * 20000; // 0-20kHz
-          
-          // Create musical patterns
-          let intensity = 0;
-          
-          // Bass drum pattern (60-200Hz)
-          if (freq >= 60 && freq <= 200) {
-            intensity += Math.sin(time * 2) * 0.8 + 0.4;
-          }
-          
-          // Mid frequencies (1-4kHz)
-          if (freq >= 1000 && freq <= 4000) {
-            intensity += Math.sin(time * 4 + i * 0.1) * 0.6 + 0.3;
-          }
-          
-          // High frequencies (6-8kHz)
-          if (freq >= 6000 && freq <= 8000) {
-            intensity += Math.sin(time * 8 + i * 0.05) * 0.4 + 0.2;
-          }
-          
-          // Add some randomness
-          intensity += (Math.random() - 0.5) * 0.1;
-          
-          // Ensure valid range
-          intensity = Math.max(0, Math.min(1, intensity));
-          array[i] = Math.floor(intensity * 150); // Scale to 0-150
-        }
-      }
-    };
-    
-    // Add context property
-    mockAnalyser.context = { sampleRate: 44100 };
-    
-    // Start visualizer with mock analyser
+    // Just show the static display with the text box - no animation
     if (this.visualizer) {
-      this.visualizer.start(mockAnalyser);
-      console.log('✅ GLOBAL POPUP: Demo visualizer started');
+      this.visualizer.stop(); // Stop any running animation
+      this.visualizer.drawEmpty(); // Show static bars with text
+      console.log('✅ GLOBAL POPUP: Demo visualizer showing static display');
     }
   }
 
