@@ -1,7 +1,7 @@
 // EQ-Translator/js/popup.js
-// Fixed Global-Only Audio Equalizer with Proper State Synchronization
+// Simplified Global-Only Audio Equalizer
 
-class GlobalOnlyAudioEqualizer {
+class GlobalAudioEqualizer {
   constructor() {
     this.components = {};
     this.visualizer = null;
@@ -15,7 +15,7 @@ class GlobalOnlyAudioEqualizer {
 
   async init() {
     try {
-      console.log('🌍 GLOBAL POPUP: Initializing global-only equalizer...');
+      console.log('🌍 GLOBAL POPUP: Initializing global audio equalizer...');
       this.updateStatus('Initializing...', 'pending');
       
       // Initialize minimal components needed
@@ -85,12 +85,10 @@ class GlobalOnlyAudioEqualizer {
       
       // Determine actual state from both sources
       const isBackgroundActive = backgroundResponse?.isActive || false;
-      const isContentScriptActive = contentScriptResponse?.isActive || false;
       const activeTabs = backgroundResponse?.activeTabs || [];
       
       console.log('🔍 GLOBAL POPUP: State analysis:', {
         backgroundActive: isBackgroundActive,
-        contentScriptActive: isContentScriptActive,
         activeTabs: activeTabs,
         currentTabInActiveTabs: activeTabs.includes(this.state.currentTabId)
       });
@@ -101,18 +99,10 @@ class GlobalOnlyAudioEqualizer {
         this.state.globalEQActive = true;
         this.state.lastKnownSettings = backgroundResponse.settings;
         
-        this.updateGlobalEQUI(true);
         this.updateStatus(`🌍 Global EQ Active (${activeTabs.length} tabs)`, 'active');
-        
-        this.showNotification(
-          'Global EQ Running',
-          `EQ is active on ${activeTabs.length} tabs. Settings are synchronized.`,
-          'success'
-        );
       } else {
         console.log('🔍 GLOBAL POPUP: Global EQ is not active');
         this.state.globalEQActive = false;
-        this.updateGlobalEQUI(false);
         this.updateStatus('Ready - Global EQ Disabled', 'active');
       }
       
@@ -190,7 +180,7 @@ class GlobalOnlyAudioEqualizer {
     });
   }
 
-  // GLOBAL EQ ONLY - NO LEGACY FALLBACK
+  // GLOBAL EQ ONLY
   async toggleGlobalEQ(enabled) {
     try {
       console.log('🌍 GLOBAL POPUP: Toggling global EQ to:', enabled);
@@ -247,13 +237,6 @@ class GlobalOnlyAudioEqualizer {
         this.state.globalEQActive = true;
         this.state.lastKnownSettings = settings;
         this.updateStatus('🌍 Global EQ Active', 'active');
-        this.updateGlobalEQUI(true);
-        
-        this.showNotification(
-          'Global EQ Started',
-          'EQ is now active on ALL tabs in your browser!',
-          'success'
-        );
         
         return true;
       } else {
@@ -282,9 +265,7 @@ class GlobalOnlyAudioEqualizer {
         this.state.globalEQActive = false;
         this.state.lastKnownSettings = null;
         this.updateStatus('Ready - Global EQ Disabled', 'active');
-        this.updateGlobalEQUI(false);
         
-        this.showNotification('Global EQ Stopped', 'EQ stopped on all tabs', 'info');
         return true;
       }
       
@@ -301,7 +282,7 @@ class GlobalOnlyAudioEqualizer {
     // Update UI
     this.updateEQBandUI(index, value);
     
-    // Update global EQ if active - NO LOCAL PROCESSING
+    // Update global EQ if active
     if (this.state.globalEQActive) {
       this.updateGlobalEQSettings();
     }
@@ -399,10 +380,8 @@ class GlobalOnlyAudioEqualizer {
           
           if (this.state.globalEQActive) {
             this.updateStatus(`🌍 Global EQ Active (${response.activeTabs?.length || 0} tabs)`, 'active');
-            this.updateGlobalEQUI(true);
           } else {
             this.updateStatus('Ready - Global EQ Disabled', 'active');
-            this.updateGlobalEQUI(false);
           }
           
           // Update toggle to match actual state
@@ -449,43 +428,6 @@ class GlobalOnlyAudioEqualizer {
     
     if (container) {
       container.classList.toggle('disabled', !enabled);
-    }
-  }
-
-  updateGlobalEQUI(enabled) {
-    console.log('🎨 GLOBAL POPUP: Updating global EQ UI, enabled:', enabled);
-    
-    const container = document.querySelector('.eq-container');
-    
-    if (container) {
-      container.classList.toggle('global-active', enabled);
-      
-      // Add/remove global indicator
-      let indicator = container.querySelector('.global-indicator');
-      
-      if (enabled && !indicator) {
-        indicator = document.createElement('div');
-        indicator.className = 'global-indicator';
-        indicator.innerHTML = '🌍 GLOBAL MODE ACTIVE';
-        indicator.style.cssText = `
-          position: absolute;
-          top: -15px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: #007aff;
-          color: white;
-          font-size: 10px;
-          font-weight: 600;
-          padding: 4px 12px;
-          border-radius: 12px;
-          box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-          z-index: 10;
-        `;
-        container.style.position = 'relative';
-        container.appendChild(indicator);
-      } else if (!enabled && indicator) {
-        indicator.remove();
-      }
     }
   }
 
@@ -542,8 +484,8 @@ class GlobalOnlyAudioEqualizer {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 GLOBAL POPUP: DOM loaded, initializing Global-Only Audio Equalizer...');
-  window.globalAudioEqualizer = new GlobalOnlyAudioEqualizer();
+  console.log('🚀 GLOBAL POPUP: DOM loaded, initializing Global Audio Equalizer...');
+  window.globalAudioEqualizer = new GlobalAudioEqualizer();
   window.globalAudioEqualizer.init();
 });
 

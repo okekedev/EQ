@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Audio Equalizer</title>
+  <title>Global Audio Equalizer</title>
   <link rel="stylesheet" href="css/popup.css">
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>🎛️ Audio Equalizer</h1>
+      <h1>🌍 Global Audio EQ</h1>
       <div class="status">
         <span id="status-text">Ready</span>
         <span id="status-icon" class="status-icon"></span>
@@ -16,20 +16,7 @@
     </header>
 
     <main>
-      <!-- Global Mode Toggle Section -->
-      <div class="global-mode-section">
-        <label class="global-mode-switch">
-          <input type="checkbox" id="global-mode">
-          <span class="global-switch-slider"></span>
-        </label>
-        <div class="mode-info">
-          <span class="mode-label">Single Tab Mode</span>
-          <span class="mode-description">EQ affects current tab only</span>
-        </div>
-        <span class="mode-badge">🌍</span>
-      </div>
-
-      <!-- Single EQ Section -->
+      <!-- Global EQ Section -->
       <div class="eq-container">
         <!-- EQ Enable/Disable Switch -->
         <div class="eq-power-section">
@@ -44,7 +31,6 @@
         <!-- Audio Visualizer -->
         <div class="eq-visualizer">
           <canvas id="visualizer-canvas" width="350" height="120"></canvas>
-          <div class="visualizer-info">Real-time audio visualization</div>
         </div>
         
         <!-- EQ Controls -->
