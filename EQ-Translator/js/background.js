@@ -1,7 +1,7 @@
 // EQ-Translator/js/background.js
-// Updated Background Script with Efficient EQ Toggle Support
+// Updated Background Script with Emoji Circle Badges
 
-console.log('🌍 DEBUG: EQ Translator background script loaded (Efficient Toggle Edition)');
+console.log('🌍 DEBUG: EQ Translator background script loaded (Emoji Badge Edition)');
 
 // Enhanced state management
 let globalEQState = {
@@ -289,7 +289,7 @@ async function handleStopGlobalEQ(message, sender) {
     
     console.log(`✅ DEBUG: Global EQ stopped on ${stopCount} tabs`);
     
-    // Clear badge
+    // Clear badge completely when stopped
     updateGlobalBadge(false);
     
     console.log('🛑 DEBUG: === STOP GLOBAL EQ HANDLER COMPLETE ===');
@@ -311,6 +311,9 @@ async function handleUpdateGlobalEQSettings(message, sender) {
     
     // Save to storage
     await saveGlobalEQSettings();
+    
+    // Update badge based on new EQ enabled state
+    updateGlobalBadge(globalEQState.isActive);
     
     // Update all active tabs with new settings (this will update EQ filters)
     let updateCount = 0;
@@ -370,35 +373,49 @@ function handleLegacyCapturesStopped(message, sender) {
   clearLegacyBadge();
 }
 
-// Badge Management
+// UPDATED: Emoji Circle Badge Management (No Background)
 function updateGlobalBadge(isActive) {
   console.log('🏷️ DEBUG: Updating global badge, active:', isActive);
   
-  chrome.action.setBadgeText({
-    text: isActive ? '🌍' : ''
-  });
-  
-  chrome.action.setBadgeBackgroundColor({
-    color: isActive ? '#007aff' : '#ff3b30'
-  });
+  if (isActive) {
+    const eqEnabled = globalEQState.settings.eqEnabled;
+    
+    // Use Unicode colored circles with no background
+    chrome.action.setBadgeText({
+      text: eqEnabled ? '🟢' : '🔴'  // Green or red emoji circles
+    });
+    
+    // No background color set - Chrome will use default/no background
+    
+    console.log(`🏷️ DEBUG: Badge set to ${eqEnabled ? 'GREEN' : 'RED'} emoji circle (no background)`);
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+    console.log('🏷️ DEBUG: Badge cleared (EQ completely off)');
+  }
 }
 
 function updateLegacyBadge(tabId, isActive) {
   console.log('🏷️ DEBUG: Updating legacy badge for tab', tabId, 'active:', isActive);
   
-  chrome.action.setBadgeText({
-    text: isActive ? '🎛️' : '',
-    tabId: tabId
-  });
-  
-  chrome.action.setBadgeBackgroundColor({
-    color: isActive ? '#34c759' : '#ff3b30'
-  });
+  if (isActive) {
+    chrome.action.setBadgeText({
+      text: '🟢',  // Green emoji circle for legacy mode
+      tabId: tabId
+    });
+    
+    // No background color set for legacy mode either
+    
+  } else {
+    chrome.action.setBadgeText({
+      text: '',
+      tabId: tabId
+    });
+  }
 }
 
 function clearLegacyBadge() {
   console.log('🏷️ DEBUG: Clearing legacy badge');
-  chrome.action.setBadgeText({ text: '' });
+  chrome.action.setBadgeText({ text: '' });  // Remove badge completely
 }
 
 // Storage Management

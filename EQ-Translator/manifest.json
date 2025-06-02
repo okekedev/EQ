@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Flip Phone - Global EQ",
+  "name": "Sundai EQ",
   "version": "2.1.1",
-  "description": "🌍 Global audio equalizer that works on ALL tabs - retro flip phone vibes for your entire browser! 📱",
+  "description": "🌍 Global audio equalizer that works on ALL tabs - Retro audio vibes for your entire browser! 📱",
   "permissions": [
     "tabCapture",
     "storage",

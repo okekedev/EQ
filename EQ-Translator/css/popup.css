@@ -1,4 +1,4 @@
-/* Global Audio Equalizer - Simplified Global-Only Design */
+/* Global Audio Equalizer - Simplified Global-Only Design with Logo */
 
 * {
   margin: 0;
@@ -35,7 +35,7 @@ body {
   flex-direction: column;
 }
 
-/* Header */
+/* Header with Logo */
 header {
   display: flex;
   justify-content: space-between;
@@ -47,12 +47,52 @@ header {
   border-radius: 12px 12px 0 0;
 }
 
-header h1 {
-  font-size: 18px;
-  font-weight: 600;
+/* UPDATED: Logo styling */
+.header-logo {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.logo-image {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1d1d1f;
+  letter-spacing: -0.5px;
+}
+
+/* Alternative: Logo only (no text) */
+.header-logo.logo-only .logo-image {
+  width: 28px;
+  height: 28px;
+}
+
+.header-logo.logo-only .logo-text {
+  display: none;
+}
+
+/* Alternative: Larger logo with brand name below */
+.header-logo.logo-brand {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.header-logo.logo-brand .logo-image {
+  width: 32px;
+  height: 32px;
+}
+
+.header-logo.logo-brand .logo-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8e8e93;
 }
 
 .status {
@@ -420,8 +460,6 @@ main {
     opacity: 1;
   }
 }
-
-/* Global EQ Active Animation - Removed */
 
 /* Scrollbar */
 ::-webkit-scrollbar {

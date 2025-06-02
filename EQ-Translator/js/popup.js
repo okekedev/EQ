@@ -256,7 +256,7 @@ class GlobalAudioEqualizer {
           
           // Update local state - interception stays active, just EQ disabled
           this.state.lastKnownSettings = settings;
-          this.updateStatus('🌍 Global EQ Bypassed (audio preserved)', 'active');
+          this.updateStatus('EQ Bypassed', 'active');
         } else {
           this.updateStatus('Ready - Global EQ Disabled', 'active');
         }
@@ -301,7 +301,7 @@ class GlobalAudioEqualizer {
       if (response?.success) {
         this.state.globalEQActive = true;
         this.state.lastKnownSettings = settings;
-        this.updateStatus('🌍 Global EQ Active', 'active');
+        this.updateStatus('EQ Active', 'active');
         
         // Stop demo mode and connect to real audio
         this.stopDemoVisualizer();
