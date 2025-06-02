@@ -1,4 +1,4 @@
-// Enhanced Global Content Script with Working Visualizer Support
+// Enhanced Global Content Script with Efficient EQ Toggle - Complete Updated Version
 
 console.log('🌍 GLOBAL EQ: Loading on', window.location.href);
 
@@ -20,7 +20,7 @@ class GlobalAudioEQProcessor {
     this.interceptedElements = new Set();
     this.mutationObserver = null;
     
-    // Visualizer support - FIXED
+    // Visualizer support
     this.visualizerAnalyser = null;
     this.visualizerContext = null;
     this.mixerNode = null;
@@ -86,7 +86,7 @@ class GlobalAudioEQProcessor {
           break;
           
         case 'getVisualizerAnalyser':
-          // FIXED: Return real analyser data
+          // Return real analyser data
           const data = this.getVisualizerData();
           console.log('🎨 GLOBAL EQ: Sending visualizer data:', data ? 'YES' : 'NO', data);
           sendResponse({ 
@@ -123,18 +123,21 @@ class GlobalAudioEQProcessor {
     }
   }
 
+  // UPDATED: More efficient start that handles already-active state
   async startGlobalEQ(settings) {
     try {
-      if (this.isActive) {
-        console.log('🌐 GLOBAL EQ: Already active');
-        return true;
-      }
-      
       console.log('🎛️ GLOBAL EQ: Starting audio interception...');
       console.log('🎛️ GLOBAL EQ: Settings:', settings);
       
       // Store settings
       this.settings = { ...this.settings, ...settings };
+      
+      if (this.isActive) {
+        // Already intercepting, just update settings
+        console.log('🌐 GLOBAL EQ: Already active, updating settings...');
+        this.updateGlobalEQSettings(settings);
+        return true;
+      }
       
       // CRITICAL: Setup visualization system FIRST
       await this.setupVisualizationSystem();
@@ -155,6 +158,7 @@ class GlobalAudioEQProcessor {
       });
       
       console.log('✅ GLOBAL EQ: Audio interception active!');
+      console.log(`🎛️ GLOBAL EQ: EQ effects ${this.settings.eqEnabled ? 'ENABLED' : 'BYPASSED'}`);
       console.log('🎨 GLOBAL EQ: Visualizer ready:', !!this.visualizerAnalyser);
       
       return true;
@@ -477,7 +481,7 @@ class GlobalAudioEQProcessor {
     return chain;
   }
 
-  // FIXED: Get real visualizer data
+  // Get real visualizer data
   getVisualizerData() {
     if (!this.visualizerAnalyser) {
       console.log('🎨 GLOBAL EQ: No visualizer analyser available');
@@ -511,10 +515,15 @@ class GlobalAudioEQProcessor {
     }
   }
 
+  // UPDATED: More efficient settings update that preserves audio flow
   updateGlobalEQSettings(settings) {
     try {
       console.log('⚙️ GLOBAL EQ: Updating settings:', settings);
       
+      // Store the previous enabled state
+      const wasEnabled = this.settings.eqEnabled;
+      
+      // Update settings
       this.settings = { ...this.settings, ...settings };
       
       // Update Web Audio contexts
@@ -537,39 +546,53 @@ class GlobalAudioEQProcessor {
       
       console.log(`⚙️ GLOBAL EQ: Updated ${updatedContexts} contexts and ${updatedElements} elements`);
       
+      // Log the state change for debugging
+      if (wasEnabled !== this.settings.eqEnabled) {
+        console.log(`🎛️ GLOBAL EQ: EQ ${this.settings.eqEnabled ? 'ENABLED' : 'BYPASSED'} - Audio chains remain connected`);
+      }
+      
     } catch (error) {
       console.error('❌ GLOBAL EQ: Error updating settings:', error);
     }
   }
 
+  // UPDATED: Efficient EQ chain update that bypasses instead of disconnecting
   updateEQChain(eqChain) {
     eqChain.filters.forEach((filter, index) => {
       if (filter && this.settings.eqBands[index] !== undefined) {
+        // CRITICAL FIX: When EQ is disabled, set gain to 0 instead of breaking the chain
         const newGain = this.settings.eqEnabled ? this.settings.eqBands[index] : 0;
-        filter.gain.value = newGain;
-        console.log(`🎛️ GLOBAL EQ: Updated filter ${index} to ${newGain}dB`);
+        
+        // Smoothly transition the gain to prevent audio clicks
+        try {
+          const currentTime = filter.context.currentTime;
+          filter.gain.setValueAtTime(newGain, currentTime);
+        } catch (error) {
+          // Fallback to direct setting if scheduling fails
+          filter.gain.value = newGain;
+        }
+        
+        console.log(`🎛️ GLOBAL EQ: Updated filter ${index} to ${newGain}dB (enabled: ${this.settings.eqEnabled})`);
       }
     });
   }
 
+  // UPDATED: Only stop interception when explicitly requested (page unload, extension disable)
   async stopGlobalEQ() {
     try {
       if (!this.isActive) return true;
       
       console.log('🛑 GLOBAL EQ: Stopping audio interception...');
       
-      // Stop Web Audio interception
+      // Only stop when explicitly requested (like page unload or extension disable)
+      // Normal EQ toggle should NOT call this method
+      
       this.stopWebAudioInterception();
-      
-      // Stop media element interception
       this.stopMediaElementInterception();
-      
-      // Clean up visualization system
       this.cleanupVisualizationSystem();
       
       this.isActive = false;
       
-      // Notify background
       chrome.runtime.sendMessage({
         action: 'globalEQStoppedOnTab',
         url: window.location.href
@@ -629,6 +652,7 @@ class GlobalAudioEQProcessor {
     console.log('✅ GLOBAL EQ: Visualization system cleaned up');
   }
 
+  // UPDATED: More careful Web Audio interception stopping
   stopWebAudioInterception() {
     // Restore original constructors
     if (this.originalAudioContext) {
@@ -640,25 +664,54 @@ class GlobalAudioEQProcessor {
       this.originalWebkitAudioContext = null;
     }
     
-    // Restore contexts
+    // IMPROVED: More careful context restoration
     this.interceptedContexts.forEach(context => {
       if (context._originalDestination && context._eqChain) {
         try {
-          context._eqChain.output.disconnect();
+          // First, bypass the EQ by connecting input directly to output
+          if (context._eqDestination) {
+            context._eqDestination.disconnect();
+            context._eqDestination.connect(context._originalDestination);
+          }
           
-          Object.defineProperty(context, 'destination', {
-            value: context._originalDestination,
-            configurable: true,
-            enumerable: true
-          });
+          // Wait a moment, then clean up the EQ chain
+          setTimeout(() => {
+            try {
+              if (context._eqChain.output) {
+                context._eqChain.output.disconnect();
+              }
+              
+              // Restore original destination
+              Object.defineProperty(context, 'destination', {
+                value: context._originalDestination,
+                configurable: true,
+                enumerable: true
+              });
+              
+              console.log('✅ GLOBAL EQ: Context gracefully restored');
+            } catch (cleanupError) {
+              console.warn('⚠️ GLOBAL EQ: Minor cleanup error (audio should still work):', cleanupError);
+            }
+          }, 200);
+          
         } catch (error) {
           console.error('❌ GLOBAL EQ: Error restoring context:', error);
+          // Try to at least restore the destination
+          try {
+            Object.defineProperty(context, 'destination', {
+              value: context._originalDestination,
+              configurable: true,
+              enumerable: true
+            });
+          } catch (fallbackError) {
+            console.error('❌ GLOBAL EQ: Fallback restoration also failed:', fallbackError);
+          }
         }
       }
     });
     
     this.interceptedContexts.clear();
-    console.log('🛑 GLOBAL EQ: Web Audio interception stopped');
+    console.log('🛑 GLOBAL EQ: Web Audio interception stopped gracefully');
   }
 
   stopMediaElementInterception() {

@@ -1,4 +1,4 @@
-// Fixed Popup with All Issues Resolved
+// Fixed Popup with All Issues Resolved - Complete Updated Version
 
 class GlobalAudioEqualizer {
   constructor() {
@@ -181,6 +181,7 @@ class GlobalAudioEqualizer {
       // Update the main EQ toggle to match the actual state
       const eqToggle = document.getElementById('eq-enabled');
       if (eqToggle) {
+        // Show toggle as ON if interception is active, regardless of EQ enabled state
         eqToggle.checked = this.state.globalEQActive;
         console.log('⚙️ GLOBAL POPUP: Set EQ toggle to:', this.state.globalEQActive);
       }
@@ -222,30 +223,43 @@ class GlobalAudioEqualizer {
     });
   }
 
-  // GLOBAL EQ ONLY
+  // UPDATED: More efficient EQ toggle that preserves audio interception
   async toggleGlobalEQ(enabled) {
     try {
       console.log('🌍 GLOBAL POPUP: Toggling global EQ to:', enabled);
       console.log('🌍 GLOBAL POPUP: Current state was:', this.state.globalEQActive);
       
-      // Don't do anything if the state hasn't actually changed
-      if (enabled === this.state.globalEQActive) {
-        console.log('🌍 GLOBAL POPUP: State unchanged, skipping toggle');
-        return;
-      }
+      // Update UI immediately to show the change is happening
+      this.updateEQUI(enabled);
+      this.updateStatus(enabled ? 'Starting Global EQ...' : 'Disabling EQ effects...', 'pending');
       
-      // Save state to storage
+      // Get current settings
+      const settings = await this.components.storage.getCurrentSettings();
+      settings.eqEnabled = enabled;
+      settings.eqBands = this.getCurrentEQValues();
+      
+      // Save to storage
       await this.components.storage.save('eqEnabled', enabled);
       
-      // Update UI immediately
-      this.updateEQUI(enabled);
-      
       if (enabled) {
-        console.log('🌍 GLOBAL POPUP: Starting global EQ...');
+        console.log('🌍 GLOBAL POPUP: Starting/enabling global EQ...');
         await this.startGlobalEQ();
       } else {
-        console.log('🛑 GLOBAL POPUP: Stopping global EQ...');
-        await this.stopGlobalEQ();
+        if (this.state.globalEQActive) {
+          console.log('🛑 GLOBAL POPUP: Disabling EQ effects (keeping audio interception)...');
+          
+          // Just disable EQ effects, don't stop interception
+          await chrome.runtime.sendMessage({
+            action: 'updateGlobalEQSettings',
+            settings: settings
+          });
+          
+          // Update local state - interception stays active, just EQ disabled
+          this.state.lastKnownSettings = settings;
+          this.updateStatus('🌍 Global EQ Bypassed (audio preserved)', 'active');
+        } else {
+          this.updateStatus('Ready - Global EQ Disabled', 'active');
+        }
       }
       
     } catch (error) {
@@ -256,6 +270,7 @@ class GlobalAudioEqualizer {
       const checkbox = document.getElementById('eq-enabled');
       if (checkbox) checkbox.checked = !enabled;
       this.updateEQUI(!enabled);
+      this.updateStatus('EQ toggle failed', 'error');
     }
   }
 
@@ -306,37 +321,6 @@ class GlobalAudioEqualizer {
       this.startDemoVisualizer();
       return false;
     }
-  }
-
-  async stopGlobalEQ() {
-    try {
-      console.log('🛑 GLOBAL POPUP: === STOPPING GLOBAL EQ ===');
-      
-      // Disconnect visualizer first
-      this.disconnectVisualizerFromAudio();
-      
-      const response = await chrome.runtime.sendMessage({
-        action: 'stopGlobalEQ'
-      });
-      
-      console.log('🛑 GLOBAL POPUP: Stop response:', response);
-      
-      if (response?.success) {
-        this.state.globalEQActive = false;
-        this.state.lastKnownSettings = null;
-        this.updateStatus('Ready - Global EQ Disabled', 'active');
-        
-        // Start demo visualizer
-        this.startDemoVisualizer();
-        
-        return true;
-      }
-      
-    } catch (error) {
-      console.error('❌ GLOBAL POPUP: Error stopping global EQ:', error);
-    }
-    
-    return false;
   }
 
   async connectVisualizerToAudio() {
@@ -561,6 +545,7 @@ class GlobalAudioEqualizer {
     }
   }
 
+  // UPDATED: Removed popup notification
   async applyEQPreset(preset) {
     console.log('🎨 GLOBAL POPUP: Applying preset:', preset);
     
@@ -596,12 +581,8 @@ class GlobalAudioEqualizer {
     });
     document.querySelector(`[data-preset="${preset}"]`)?.classList.add('active');
     
-    const statusMessage = this.state.globalEQActive ? 'applied to all tabs' : 'saved (will apply when EQ is enabled)';
-    this.showNotification(
-      'Preset Applied', 
-      `${preset.charAt(0).toUpperCase() + preset.slice(1)} EQ preset ${statusMessage}`,
-      'success'
-    );
+    // REMOVED: The showNotification call that was causing the popup
+    console.log(`✅ GLOBAL POPUP: ${preset} preset applied ${this.state.globalEQActive ? 'to all tabs' : '(saved for when EQ is enabled)'}`);
   }
 
   startGlobalStatusMonitoring() {

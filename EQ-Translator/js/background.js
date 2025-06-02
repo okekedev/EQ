@@ -1,7 +1,7 @@
 // EQ-Translator/js/background.js
-// DEBUG VERSION - Working Background Script with Global EQ Support
+// Updated Background Script with Efficient EQ Toggle Support
 
-console.log('🌍 DEBUG: EQ Translator background script loaded (Working Global Edition)');
+console.log('🌍 DEBUG: EQ Translator background script loaded (Efficient Toggle Edition)');
 
 // Enhanced state management
 let globalEQState = {
@@ -37,7 +37,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// Enhanced message handling for global EQ
+// Enhanced message handling for efficient EQ toggle
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('📨 DEBUG: Background received message:', message.action);
   console.log('📨 DEBUG: Message sender:', sender.tab?.id || 'popup');
@@ -155,7 +155,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Global EQ Handlers
+// UPDATED: More efficient Global EQ Handler
 async function handleStartGlobalEQ(message, sender) {
   try {
     console.log('🌍 DEBUG: === STARTING GLOBAL EQ HANDLER ===');
@@ -165,7 +165,7 @@ async function handleStartGlobalEQ(message, sender) {
     // Store global settings
     console.log('🌍 DEBUG: Storing global settings...');
     globalEQState.settings = { ...globalEQState.settings, ...message.settings };
-    globalEQState.isActive = true;
+    globalEQState.isActive = true; // This means interception is active
     console.log('🌍 DEBUG: Updated global state:', globalEQState);
     
     // Save to storage
@@ -215,15 +215,15 @@ async function handleStartGlobalEQ(message, sender) {
         if (response?.success) {
           globalEQState.activeTabs.add(tab.id);
           successCount++;
-          console.log(`✅ DEBUG: Global EQ started on tab ${tab.id}: ${tab.title}`);
+          console.log(`✅ DEBUG: Audio interception started on tab ${tab.id}: ${tab.title}`);
         } else {
           failCount++;
-          console.log(`❌ DEBUG: Global EQ failed on tab ${tab.id}: ${tab.title}, response:`, response);
+          console.log(`❌ DEBUG: Audio interception failed on tab ${tab.id}: ${tab.title}, response:`, response);
         }
         
       } catch (error) {
         failCount++;
-        console.log(`❌ DEBUG: Could not start EQ on tab ${tab.id} (${tab.title}): ${error.message}`);
+        console.log(`❌ DEBUG: Could not start on tab ${tab.id} (${tab.title}): ${error.message}`);
         console.log(`❌ DEBUG: Error details:`, error);
       }
     }
@@ -250,6 +250,7 @@ async function handleStartGlobalEQ(message, sender) {
   }
 }
 
+// UPDATED: Stop handler only for explicit stops (not EQ toggle)
 async function handleStopGlobalEQ(message, sender) {
   try {
     console.log('🛑 DEBUG: === STOPPING GLOBAL EQ HANDLER ===');
@@ -300,6 +301,7 @@ async function handleStopGlobalEQ(message, sender) {
   }
 }
 
+// UPDATED: Efficient settings update that preserves interception
 async function handleUpdateGlobalEQSettings(message, sender) {
   try {
     console.log('⚙️ DEBUG: === UPDATING GLOBAL EQ SETTINGS ===');
@@ -310,7 +312,7 @@ async function handleUpdateGlobalEQSettings(message, sender) {
     // Save to storage
     await saveGlobalEQSettings();
     
-    // Update all active tabs
+    // Update all active tabs with new settings (this will update EQ filters)
     let updateCount = 0;
     const activeTabs = Array.from(globalEQState.activeTabs);
     
@@ -330,6 +332,7 @@ async function handleUpdateGlobalEQSettings(message, sender) {
     }
     
     console.log(`✅ DEBUG: Updated global EQ settings on ${updateCount} tabs`);
+    console.log(`🎛️ DEBUG: EQ effects are now ${globalEQState.settings.eqEnabled ? 'ENABLED' : 'BYPASSED'}`);
     
   } catch (error) {
     console.error('❌ DEBUG: Failed to update global EQ settings:', error);
@@ -339,14 +342,14 @@ async function handleUpdateGlobalEQSettings(message, sender) {
 function handleGlobalEQStartedOnTab(message, sender) {
   if (sender.tab) {
     globalEQState.activeTabs.add(sender.tab.id);
-    console.log(`🎛️ DEBUG: Global EQ confirmed active on tab ${sender.tab.id}: ${message.url}`);
+    console.log(`🎛️ DEBUG: Audio interception confirmed active on tab ${sender.tab.id}: ${message.url}`);
   }
 }
 
 function handleGlobalEQStoppedOnTab(message, sender) {
   if (sender.tab) {
     globalEQState.activeTabs.delete(sender.tab.id);
-    console.log(`🛑 DEBUG: Global EQ stopped on tab ${sender.tab.id}: ${message.url}`);
+    console.log(`🛑 DEBUG: Audio interception stopped on tab ${sender.tab.id}: ${message.url}`);
   }
 }
 
@@ -450,7 +453,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
           
           if (response?.success) {
             globalEQState.activeTabs.add(tabId);
-            console.log(`🎛️ DEBUG: Global EQ started on newly loaded tab ${tabId}`);
+            console.log(`🎛️ DEBUG: Audio interception started on newly loaded tab ${tabId}`);
           } else {
             console.log(`❌ DEBUG: Failed to start EQ on newly loaded tab ${tabId}:`, response);
           }
