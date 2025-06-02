@@ -1,4 +1,4 @@
-// Fixed Popup with All Issues Resolved - Complete Updated Version
+// Fixed Popup with No Autostart - Complete Updated Version
 
 class GlobalAudioEqualizer {
   constructor() {
@@ -32,10 +32,10 @@ class GlobalAudioEqualizer {
       // Get current tab info
       await this.getCurrentTabInfo();
       
-      // CRITICAL: Check global EQ state BEFORE setting up UI
-      await this.checkGlobalEQState();
+      // FIXED: Just check state without auto-starting
+      await this.checkGlobalEQStateOnly();
       
-      // Load settings and sync with running state
+      // Load settings and sync with actual running state (no auto-start)
       await this.loadAndSyncSettings();
       
       // Setup event listeners AFTER state is known
@@ -44,12 +44,8 @@ class GlobalAudioEqualizer {
       // Start monitoring
       this.startGlobalStatusMonitoring();
       
-      // Connect visualizer to audio if EQ is active, otherwise start demo
-      if (this.state.globalEQActive) {
-        await this.connectVisualizerToAudio();
-      } else {
-        this.startDemoVisualizer();
-      }
+      // Always start with demo visualizer - only connect to real audio when user enables EQ
+      this.startDemoVisualizer();
       
       this.updateStatus('Ready', 'active');
       console.log('✅ GLOBAL POPUP: Initialization complete');
@@ -93,9 +89,10 @@ class GlobalAudioEqualizer {
     }
   }
 
-  async checkGlobalEQState() {
+  // FIXED: Only check state, don't auto-start or update toggle
+  async checkGlobalEQStateOnly() {
     try {
-      console.log('🔍 GLOBAL POPUP: Checking global EQ state...');
+      console.log('🔍 GLOBAL POPUP: Checking global EQ state (no auto-start)...');
       
       // First, ping the background script to make sure it's alive
       try {
@@ -135,9 +132,9 @@ class GlobalAudioEqualizer {
         connectedSources: contentScriptResponse?.connectedSources
       });
       
-      // Global EQ is considered active if background says it's active
+      // FIXED: Just update internal state for monitoring, don't change UI toggle
       if (isBackgroundActive) {
-        console.log('🌍 GLOBAL POPUP: Global EQ is ACTIVE');
+        console.log('🌍 GLOBAL POPUP: Global EQ is already running in background (toggle stays as user set it)');
         this.state.globalEQActive = true;
         this.state.lastKnownSettings = backgroundResponse.settings;
         
@@ -178,18 +175,33 @@ class GlobalAudioEqualizer {
         }
       });
       
-      // Update the main EQ toggle to match the actual state
+      // FIXED: Restore the toggle to match the user's last intended state
       const eqToggle = document.getElementById('eq-enabled');
       if (eqToggle) {
-        // Show toggle as ON if interception is active, regardless of EQ enabled state
-        eqToggle.checked = this.state.globalEQActive;
-        console.log('⚙️ GLOBAL POPUP: Set EQ toggle to:', this.state.globalEQActive);
+        // Check if there's a saved user toggle state, otherwise use the EQ enabled state
+        const lastUserToggleState = await this.getUserToggleState();
+        const toggleState = lastUserToggleState !== null ? lastUserToggleState : (settingsToUse.eqEnabled || false);
+        
+        eqToggle.checked = toggleState;
+        console.log('⚙️ GLOBAL POPUP: Restored toggle to user\'s last state:', toggleState);
+        
+        // Update UI to match the toggle state
+        this.updateEQUI(toggleState);
+        
+        // If toggle is ON but background is not active, we need to start it
+        if (toggleState && !this.state.globalEQActive) {
+          console.log('⚙️ GLOBAL POPUP: Toggle was ON when closed, restarting EQ...');
+          // Don't trigger the change event, just start the EQ
+          await this.startGlobalEQ();
+        }
+        // If toggle is OFF but background is active, we need to show bypassed state
+        else if (!toggleState && this.state.globalEQActive) {
+          console.log('⚙️ GLOBAL POPUP: Toggle was OFF when closed, showing bypassed state...');
+          this.updateStatus('EQ Bypassed', 'bypassed');
+        }
       }
       
-      // Update UI to match actual state
-      this.updateEQUI(this.state.globalEQActive);
-      
-      console.log('✅ GLOBAL POPUP: Settings sync complete');
+      console.log('✅ GLOBAL POPUP: Settings sync complete - restored user\'s last state');
       
     } catch (error) {
       console.error('❌ GLOBAL POPUP: Error loading/syncing settings:', error);
@@ -223,11 +235,14 @@ class GlobalAudioEqualizer {
     });
   }
 
-  // UPDATED: More efficient EQ toggle that preserves audio interception
+  // UPDATED: Save user toggle state and more efficient EQ toggle
   async toggleGlobalEQ(enabled) {
     try {
       console.log('🌍 GLOBAL POPUP: Toggling global EQ to:', enabled);
       console.log('🌍 GLOBAL POPUP: Current state was:', this.state.globalEQActive);
+      
+      // FIXED: Save the user's toggle preference
+      await this.saveUserToggleState(enabled);
       
       // Update UI immediately to show the change is happening
       this.updateEQUI(enabled);
@@ -256,7 +271,8 @@ class GlobalAudioEqualizer {
           
           // Update local state - interception stays active, just EQ disabled
           this.state.lastKnownSettings = settings;
-          this.updateStatus('EQ Bypassed', 'active');
+          // FIXED: Use 'bypassed' status type for bypassed state (red dot)
+          this.updateStatus('EQ Bypassed', 'bypassed');
         } else {
           this.updateStatus('Ready - Global EQ Disabled', 'active');
         }
@@ -592,39 +608,49 @@ class GlobalAudioEqualizer {
       try {
         const response = await chrome.runtime.sendMessage({ action: 'getGlobalEQState' });
         
-        // Check if state has changed
-        if (response?.isActive !== this.state.globalEQActive) {
-          console.log('📡 GLOBAL POPUP: State change detected:', {
+        // FIXED: Only update status text, never change the toggle automatically
+        const newBackgroundState = response?.isActive || false;
+        
+        if (newBackgroundState !== this.state.globalEQActive) {
+          console.log('📡 GLOBAL POPUP: Background state changed:', {
             was: this.state.globalEQActive,
-            now: response?.isActive
+            now: newBackgroundState
           });
           
-          const wasActive = this.state.globalEQActive;
-          this.state.globalEQActive = response?.isActive || false;
+          // Update internal state
+          this.state.globalEQActive = newBackgroundState;
           
+          // Update status text with appropriate dot color
           if (this.state.globalEQActive) {
-            this.updateStatus(`🌍 Global EQ Active (${response.activeTabs?.length || 0} tabs)`, 'active');
-            // Connect visualizer if it wasn't connected
-            if (!wasActive) {
-              this.stopDemoVisualizer();
-              await this.connectVisualizerToAudio();
+            // Check if EQ effects are actually enabled
+            const eqEnabled = response.settings?.eqEnabled;
+            if (eqEnabled) {
+              this.updateStatus(`🌍 Global EQ Active (${response.activeTabs?.length || 0} tabs)`, 'active');
+            } else {
+              this.updateStatus('EQ Bypassed', 'bypassed');
             }
           } else {
             this.updateStatus('Ready - Global EQ Disabled', 'active');
-            // Disconnect visualizer and start demo
-            if (wasActive) {
-              this.disconnectVisualizerFromAudio();
-              this.startDemoVisualizer();
-            }
           }
           
-          // Update toggle to match actual state
-          const checkbox = document.getElementById('eq-enabled');
-          if (checkbox && checkbox.checked !== this.state.globalEQActive) {
-            checkbox.checked = this.state.globalEQActive;
-            this.updateEQUI(this.state.globalEQActive);
-          }
+          // REMOVED: Automatic toggle state changes
+          // The toggle now only changes when the user manually clicks it
         }
+        
+        // Handle visualizer connection based on both toggle state AND background state
+        const eqToggle = document.getElementById('eq-enabled');
+        const userWantsEQOn = eqToggle ? eqToggle.checked : false;
+        
+        if (userWantsEQOn && this.state.globalEQActive && !this.state.visualizerConnected) {
+          // User wants EQ on AND background is active AND visualizer not connected
+          this.stopDemoVisualizer();
+          await this.connectVisualizerToAudio();
+        } else if ((!userWantsEQOn || !this.state.globalEQActive) && this.state.visualizerConnected) {
+          // User turned EQ off OR background stopped AND visualizer is connected
+          this.disconnectVisualizerFromAudio();
+          this.startDemoVisualizer();
+        }
+        
       } catch (error) {
         // Extension might be reloading
       }
@@ -635,6 +661,27 @@ class GlobalAudioEqualizer {
     const sliders = document.querySelectorAll('.eq-band input');
     const values = Array.from(sliders).map(slider => parseFloat(slider.value));
     return values;
+  }
+
+  // ADDED: Methods to save/restore user toggle state
+  async saveUserToggleState(enabled) {
+    try {
+      await this.components.storage.save('userToggleState', enabled);
+      console.log('💾 GLOBAL POPUP: Saved user toggle state:', enabled);
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Failed to save user toggle state:', error);
+    }
+  }
+
+  async getUserToggleState() {
+    try {
+      const state = await this.components.storage.get('userToggleState');
+      console.log('📖 GLOBAL POPUP: Retrieved user toggle state:', state);
+      return state;
+    } catch (error) {
+      console.error('❌ GLOBAL POPUP: Failed to get user toggle state:', error);
+      return null;
+    }
   }
 
   // UI Update Methods
@@ -703,6 +750,13 @@ class GlobalAudioEqualizer {
 
   cleanup() {
     console.log('🧹 GLOBAL POPUP: Cleaning up...');
+    
+    // ADDED: Save current toggle state before closing
+    const eqToggle = document.getElementById('eq-enabled');
+    if (eqToggle) {
+      this.saveUserToggleState(eqToggle.checked);
+      console.log('💾 GLOBAL POPUP: Saved toggle state on close:', eqToggle.checked);
+    }
     
     // Stop monitoring
     if (this.globalStatusInterval) {

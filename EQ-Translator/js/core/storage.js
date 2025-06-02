@@ -1,9 +1,10 @@
-// Storage Module - Minimal EQ Settings
+// Storage Module - EQ Settings with User Toggle State
 class Storage {
   constructor() {
     this.defaults = {
       eq: [0, 0, 0, 0, 0, 0, 0, 0],
-      eqEnabled: true
+      eqEnabled: true,
+      userToggleState: false // ADDED: Remember user's last toggle state
     };
   }
 
@@ -61,7 +62,8 @@ class Storage {
     const all = await this.getAll();
     return {
       eqEnabled: all.eqEnabled !== undefined ? all.eqEnabled : this.defaults.eqEnabled,
-      eqBands: all.eq !== undefined ? all.eq : this.defaults.eq
+      eqBands: all.eq !== undefined ? all.eq : this.defaults.eq,
+      userToggleState: all.userToggleState !== undefined ? all.userToggleState : this.defaults.userToggleState
     };
   }
 }

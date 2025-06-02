@@ -478,3 +478,16 @@ main {
 ::-webkit-scrollbar-thumb:hover {
   background: #a0a0a0;
 }
+
+/* Status icon updates for bypassed state */
+.status-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8e8e93;
+}
+
+.status-icon.active { background: #34c759; }     /* Green - EQ Active */
+.status-icon.error { background: #ff3b30; }      /* Red - Error */
+.status-icon.pending { background: #ff9500; }    /* Orange - Loading */
+.status-icon.bypassed { background: #ff3b30; }   /* Red - EQ Bypassed */

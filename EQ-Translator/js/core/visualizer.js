@@ -444,11 +444,11 @@ class AudioVisualizer {
     
     this.ctx.font = '11px "Courier New", monospace';
     this.ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
-    this.ctx.fillText('Enable Global EQ to see live audio', width / 2, height / 2 + 5);
+    this.ctx.fillText('Enable to see processed audio', width / 2, height / 2 + 5);
     
     this.ctx.font = '9px "Courier New", monospace';
     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    this.ctx.fillText('Each bar represents an EQ frequency band', width / 2, height / 2 + 20);
+    this.ctx.fillText('Each bar represents a frequency band', width / 2, height / 2 + 20);
   }
 
   // Configuration methods

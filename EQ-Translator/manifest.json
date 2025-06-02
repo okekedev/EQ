@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sundai EQ",
   "version": "2.1.1",
-  "description": "🌍 Global audio equalizer that works on ALL tabs - Retro audio vibes for your entire browser! 📱",
+  "description": "🌍 Global Youtube audio equalizer that works on ALL tabs - Retro audio vibes for your entire browser! 📱",
   "permissions": [
     "tabCapture",
     "storage",
