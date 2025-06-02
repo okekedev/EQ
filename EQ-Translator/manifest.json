@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sundai EQ - YouTube Audio Equalizer",
   "version": "2.1.1",
-  "description": "🎵 Professional audio equalizer for YouTube! 8-band EQ with presets, live visualizer. Perfect for YouTube music, videos, podcasts & live streams. Transform your YouTube audio! 🎧",
+  "description": "🎵 Professional audio equalizer for YouTube! 8-band EQ, live visualizer. Perfect for YouTube music, videos, podcasts. 🎧",
   "permissions": [
     "tabCapture",
     "storage",
