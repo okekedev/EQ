@@ -9,9 +9,9 @@ class AudioVisualizer {
     this.audioContext = null;
     this.sourceNode = null;
     
-    // Enhanced configuration for 6-bar EQ visualization
+    // Enhanced configuration for 8-bar EQ visualization (matching all EQ bands)
     this.config = {
-      numBars: 6, // 6 bars matching EQ frequency bands
+      numBars: 8, // 8 bars matching all EQ frequency bands
       minBarHeight: 2,
       maxBarHeight: 0.9,
       smoothingFactor: 0.25, // More responsive for spectrum display
@@ -21,16 +21,18 @@ class AudioVisualizer {
       scanLineSpacing: 4,
       scanLineOpacity: 0.06,
       
-      // EQ band frequencies and colors (6 bands to match your sliders)
-      eqBands: [170, 310, 600, 1000, 3000, 6000], // Skip 60Hz and 8kHz for cleaner look
-      eqLabels: ['170Hz', '310Hz', '600Hz', '1kHz', '3kHz', '6kHz'],
+      // EQ band frequencies and colors (8 bands to match all your sliders)
+      eqBands: [60, 170, 310, 600, 1000, 3000, 6000, 8000], // All EQ frequencies
+      eqLabels: ['60Hz', '170Hz', '310Hz', '600Hz', '1kHz', '3kHz', '6kHz', '8kHz'],
       eqColors: [
-        '#ff4444', // Low - Red
-        '#ff8844', // Low-Mid - Orange  
-        '#ffdd44', // Mid - Yellow
-        '#44ff44', // Mid-High - Green
-        '#44ddff', // High - Cyan
-        '#8844ff'  // Treble - Purple
+        '#ff3333', // 60Hz - Deep Red
+        '#ff6633', // 170Hz - Orange-Red
+        '#ff9933', // 310Hz - Orange  
+        '#ffcc33', // 600Hz - Yellow
+        '#33ff33', // 1kHz - Green
+        '#33ccff', // 3kHz - Cyan
+        '#3366ff', // 6kHz - Blue
+        '#9933ff'  // 8kHz - Purple
       ]
     };
     
@@ -254,38 +256,40 @@ class AudioVisualizer {
       
       // Get color based on frequency
       const { hue, saturation, lightness } = this.getFrequencyColor(frequency, barHeight, height);
+      const outlineColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
       
-      // Draw main bar with gradient
-      const gradient = this.ctx.createLinearGradient(0, height - barHeight, 0, height);
-      gradient.addColorStop(0, `hsl(${hue}, ${saturation}%, ${lightness + 30}%)`);
-      gradient.addColorStop(0.3, `hsl(${hue + 10}, ${saturation - 5}%, ${lightness + 15}%)`);
-      gradient.addColorStop(0.7, `hsl(${hue + 20}, ${saturation - 10}%, ${lightness}%)`);
-      gradient.addColorStop(1, `hsl(${hue + 30}, ${saturation - 15}%, ${lightness - 10}%)`);
+      // RETRO LOOK: Black fill with colored outline
       
-      this.ctx.fillStyle = gradient;
+      // Draw black fill
+      this.ctx.fillStyle = '#000000';
+      this.ctx.beginPath();
+      this.ctx.roundRect(x + 2, height - barHeight + 2, barWidth - 4, barHeight - 4, [this.config.borderRadius, this.config.borderRadius, 0, 0]);
+      this.ctx.fill();
       
-      // Draw bar with rounded top
+      // Draw colored outline/border
+      this.ctx.strokeStyle = outlineColor;
+      this.ctx.lineWidth = 3;
       this.ctx.beginPath();
       this.ctx.roundRect(x, height - barHeight, barWidth, barHeight, [this.config.borderRadius, this.config.borderRadius, 0, 0]);
-      this.ctx.fill();
+      this.ctx.stroke();
       
-      // Add glow effect
-      this.ctx.shadowColor = `hsl(${hue}, 90%, 60%)`;
-      this.ctx.shadowBlur = this.config.glowIntensity;
-      this.ctx.fill();
+      // Add inner glow effect on the outline
+      this.ctx.shadowColor = outlineColor;
+      this.ctx.shadowBlur = 8;
+      this.ctx.stroke();
       this.ctx.shadowBlur = 0;
       
-      // Draw peak indicator
-      if (peakHeight > barHeight + 2) {
-        this.ctx.fillStyle = `hsl(${hue}, 100%, 80%)`;
-        this.ctx.fillRect(x, height - peakHeight - 2, barWidth, 2);
+      // Draw peak indicator as colored line
+      if (peakHeight > barHeight + 3) {
+        this.ctx.strokeStyle = `hsl(${hue}, 100%, 80%)`;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, height - peakHeight);
+        this.ctx.lineTo(x + barWidth, height - peakHeight);
+        this.ctx.stroke();
       }
       
-      // Add subtle reflection
-      this.drawBarReflection(x, barWidth, height, hue);
-      
-      // Draw frequency label below each bar
-      this.drawFrequencyLabel(x + barWidth/2, height, this.config.eqLabels[i]);
+      // Frequency labels removed for cleaner look
     }
   }
 
@@ -403,7 +407,7 @@ class AudioVisualizer {
 
   drawStaticSpectrum(width, height) {
     const barWidth = (width - (this.config.numBars + 1) * this.config.spacing) / this.config.numBars;
-    const staticHeight = 6;
+    const staticHeight = 8;
     
     for (let i = 0; i < this.config.numBars; i++) {
       const x = i * (barWidth + this.config.spacing) + this.config.spacing;
@@ -411,19 +415,24 @@ class AudioVisualizer {
       // Use the specific EQ frequency for color
       const frequency = this.config.eqBands[i];
       const { hue } = this.getFrequencyColor(frequency, staticHeight, height);
+      const outlineColor = `hsla(${hue}, 60%, 50%, 0.7)`;
       
-      // Dim colors for inactive state
-      const gradient = this.ctx.createLinearGradient(0, height - staticHeight, 0, height);
-      gradient.addColorStop(0, `hsla(${hue}, 40%, 25%, 0.6)`);
-      gradient.addColorStop(1, `hsla(${hue + 60}, 30%, 15%, 0.4)`);
+      // RETRO LOOK: Black fill with colored outline for static bars
       
-      this.ctx.fillStyle = gradient;
+      // Draw black fill
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
       this.ctx.beginPath();
-      this.ctx.roundRect(x, height - staticHeight, barWidth, staticHeight, [1, 1, 0, 0]);
+      this.ctx.roundRect(x + 1, height - staticHeight + 1, barWidth - 2, staticHeight - 2, [1, 1, 0, 0]);
       this.ctx.fill();
       
-      // Draw frequency label below each bar
-      this.drawFrequencyLabel(x + barWidth/2, height, this.config.eqLabels[i]);
+      // Draw colored outline
+      this.ctx.strokeStyle = outlineColor;
+      this.ctx.lineWidth = 2;
+      this.ctx.beginPath();
+      this.ctx.roundRect(x, height - staticHeight, barWidth, staticHeight, [1, 1, 0, 0]);
+      this.ctx.stroke();
+      
+      // Frequency labels removed for cleaner look
     }
   }
 
@@ -431,7 +440,7 @@ class AudioVisualizer {
     this.ctx.fillStyle = 'rgba(0, 255, 255, 0.7)';
     this.ctx.font = 'bold 14px "Courier New", monospace';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('6-BAND EQ VISUALIZER', width / 2, height / 2 - 15);
+    this.ctx.fillText('8-BAND EQ VISUALIZER', width / 2, height / 2 - 15);
     
     this.ctx.font = '11px "Courier New", monospace';
     this.ctx.fillStyle = 'rgba(0, 255, 255, 0.5)';
