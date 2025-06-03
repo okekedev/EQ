@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sundai EQ - YouTube Audio Equalizer",
   "version": "2.1.1",
-  "description": "🎵 Professional audio equalizer for YouTube! 8-band EQ, live visualizer. Perfect for YouTube music, videos, podcasts. 🎧",
+  "description": "🎵 Professional audio equalizer for YouTube! Perfect for YouTube music, videos, & live streams. 🎧",
   "permissions": [
     "tabCapture",
     "storage",
@@ -10,8 +10,10 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "https://www.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://youtube.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,8 +30,10 @@
   "content_scripts": [
     {
       "matches": [
-        "http://*/*",
-        "https://*/*"
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://youtube.com/*"
       ],
       "js": [
         "js/global-content.js"
@@ -49,7 +53,12 @@
   "web_accessible_resources": [
     {
       "resources": ["js/core/*.js"],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://youtube.com/*"
+      ]
     }
   ]
 }
